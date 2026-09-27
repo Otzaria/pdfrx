@@ -140,4 +140,27 @@ void main() {
     expect(notified, greaterThan(0));
     expect((searcher.controller! as _FakeController).currentPageSet, 1);
   });
+
+  test('stopping a search keeps the matches found so far', () async {
+    final searcher = _GatedSearcher(_FakeController(_FakeDocument(3)), {1: 'word', 2: 'word', 3: 'word'});
+    addTearDown(searcher.dispose);
+    final gate = searcher.gates[2] = Completer<void>();
+    searcher.startTextSearch('word', goToFirstMatch: false, searchImmediately: true);
+    await pumpEventQueue();
+
+    var notified = 0;
+    searcher.addListener(() => notified++);
+    searcher.stopTextSearch();
+    gate.complete();
+    await pumpEventQueue();
+
+    expect(searcher.isSearching, isFalse);
+    expect(searcher.matches.map((m) => m.pageNumber), [1]);
+    expect(notified, 1);
+
+    // The stopped pattern can be searched again in full.
+    searcher.startTextSearch('word', goToFirstMatch: false, searchImmediately: true);
+    await pumpEventQueue();
+    expect(searcher.matches.map((m) => m.pageNumber), [1, 2, 3]);
+  });
 }
