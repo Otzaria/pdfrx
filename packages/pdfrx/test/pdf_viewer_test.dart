@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -734,6 +735,97 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 100));
+  });
+
+  group('physics wheel scrolling', () {
+    const center = Offset(400, 600);
+
+    Future<PdfViewerController> pumpPhysicsViewer(WidgetTester tester, PdfDocument document, int initialPage) async {
+      await binding.setSurfaceSize(const Size(800, 1200));
+      addTearDown(() => binding.setSurfaceSize(null));
+      final controller = PdfViewerController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PdfViewer(
+            PdfDocumentRefDirect(document, autoDispose: false),
+            controller: controller,
+            initialPageNumber: initialPage,
+            params: const PdfViewerParams(
+              scrollByMouseWheel: 0.2,
+              interactionDelegateProvider: PdfViewerScrollInteractionDelegateProviderPhysics(),
+              behaviorControlParams: PdfViewerBehaviorControlParams(trailingPageLoadingDelay: Duration.zero),
+            ),
+          ),
+        ),
+      );
+      for (var i = 0; i < 30 && !controller.isReady; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      }
+      expect(controller.isReady, isTrue);
+      await tester.pump(const Duration(milliseconds: 500));
+      return controller;
+    }
+
+    void wheel(double dy) => binding.handlePointerEvent(
+      PointerScrollEvent(position: center, scrollDelta: Offset(0, dy), kind: PointerDeviceKind.mouse),
+    );
+
+    Future<void> frames(WidgetTester tester, int count) async {
+      for (var i = 0; i < count; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+    }
+
+    testWidgets('goToPage after a tiny overshoot at the top lands on the page', (tester) async {
+      final document = _TestDocument(30);
+      addTearDown(document.dispose);
+      final controller = await pumpPhysicsViewer(tester, document, 1);
+
+      wheel(-10); // 2px past the top, like a trackpad nudge
+      await frames(tester, 60);
+      unawaited(controller.goToPage(pageNumber: 12));
+      await frames(tester, 120);
+
+      expect(controller.pageNumber, 12);
+      expect(
+        controller.value.getTranslation().y,
+        moreOrLessEquals(controller.calcMatrixForPage(pageNumber: 12).getTranslation().y, epsilon: 1),
+      );
+      expect(SchedulerBinding.instance.transientCallbackCount, 0);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 100));
+    });
+
+    testWidgets('pages measured above the view during a wheel scroll do not pull it back', (tester) async {
+      final document = _TestDocument(30, loadAllOnProgressive: false, unloadedPageHeight: 400);
+      addTearDown(document.dispose);
+      document.loadPagesForTest([for (var p = 14; p <= 30; p++) p]);
+      final controller = await pumpPhysicsViewer(tester, document, 16);
+
+      // Document position relative to the top of page 16, independent of the layout above it.
+      double offsetInPage16() =>
+          -controller.value.getTranslation().y / controller.currentZoom - controller.layout.pageLayouts[15].top;
+
+      final before = offsetInPage16();
+      for (var i = 0; i < 3; i++) {
+        wheel(120);
+        await frames(tester, 1);
+      }
+      document.loadPagesForTest([for (var p = 2; p <= 13; p++) p]);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await frames(tester, 120);
+
+      final travelled = offsetInPage16() - before;
+      expect(travelled, greaterThan(0));
+      expect(travelled, lessThanOrEqualTo(3 * 120 * 0.2 / controller.currentZoom + 1));
+      expect(controller.pageNumber, 16);
+      expect(SchedulerBinding.instance.transientCallbackCount, 0);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 100));
+    });
   });
 
   test('default page anchor remains top', () {
