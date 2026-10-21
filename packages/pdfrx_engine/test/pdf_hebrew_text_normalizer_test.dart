@@ -33,40 +33,6 @@ List<(String, double)> _layoutRtl(List<String> words, {double right = 500}) {
 void main() {
   const words = ['שלום', 'עולם', 'ומלואו'];
 
-  test('mixed tokens preserve Latin runs, numbers, and surrogate pairs', () {
-    for (final suffix in ['ABC', '123', '\u{1F600}']) {
-      final text = 'םולש$suffix';
-      final raw = PdfPageRawText(text, [for (var i = 0; i < text.length; i++) PdfRect(i * 10, 10, i * 10 + 10, 0)]);
-      expect(PdfHebrewTextNormalizer.normalize(raw), same(raw));
-    }
-  });
-
-  test('accent-heavy Latin text is not guessed to be a legacy encoding', () {
-    final text = List.filled(30, 'é').join();
-    final raw = _line([for (var i = 0; i < text.length; i++) (text[i], i * 10.0)]);
-    expect(PdfHebrewTextNormalizer.normalize(raw), same(raw));
-  });
-
-  test('line reordering does not reverse English word order', () {
-    final raw = _line(_layoutRtl(['ומלואו', 'world', 'hello', 'עולם', 'שלום']).reversed.toList());
-    final result = PdfHebrewTextNormalizer.normalize(raw);
-    expect(result.fullText.contains('olleh dlrow'), isTrue);
-    expect(result.fullText.indexOf('שלום'), lessThan(result.fullText.indexOf('עולם')));
-  });
-
-  test('separate physical rows without newline are not sorted together', () {
-    final first = _line(_layoutRtl(words).reversed.toList());
-    final second = _line(_layoutRtl(words).reversed.toList(), y: 500);
-    final raw = PdfPageRawText('${first.fullText} ${second.fullText}', [
-      ...first.charRects,
-      const PdfRect(0, 0, 0, 0),
-      ...second.charRects,
-    ]);
-    final result = PdfHebrewTextNormalizer.normalize(raw);
-    expect(result.fullText, 'ומלואו עולם שלום ומלואו עולם שלום');
-    expect(result.charRects.length, result.fullText.length);
-  });
-
   test('logical order is returned untouched', () {
     final raw = _line(_layoutRtl(words));
     expect(identical(PdfHebrewTextNormalizer.normalize(raw), raw), isTrue);
@@ -107,158 +73,6 @@ void main() {
     final raw = _line(visual);
     expect(raw.fullText, 'ואולמו םלוע םולש');
     expect(PdfHebrewTextNormalizer.normalize(raw).fullText, 'שלום עולם ומלואו');
-  });
-
-  test('punctuation, geresh and gershayim do not make a line mixed', () {
-    for (final line in [
-      ['שלום', 'עולם', 'ומלואו.'],
-      ['אמר', 'רבי', 'יוחנן:', 'כך', 'הוא'],
-      ['ר"ת', "וכו'", 'כמ"ש', 'ע״א', 'בית־המקדש'],
-    ]) {
-      final raw = _line(_layoutRtl(line).reversed.toList());
-      expect(PdfHebrewTextNormalizer.normalize(raw).fullText, line.join(' '));
-    }
-  });
-
-  test('words stored left to right are reordered with their punctuation', () {
-    // OCR layers: each word is logical, punctuation included, but the line runs left to right.
-    const line = ['אמר', 'רבי', 'יוחנן:', 'שלום.'];
-    final glyphs = <(String, double)>[];
-    var left = 0.0;
-    for (final word in line.reversed) {
-      if (glyphs.isNotEmpty) glyphs.add((' ', left - 10));
-      for (var i = 0; i < word.length; i++) {
-        glyphs.add((word[i], left + 10 * (word.length - 1 - i)));
-      }
-      left += 10 * (word.length + 1);
-    }
-    final raw = _line(glyphs);
-    expect(raw.fullText, line.reversed.join(' '));
-    expect(PdfHebrewTextNormalizer.normalize(raw).fullText, line.join(' '));
-  });
-
-  test('a line with a Latin word keeps its order', () {
-    final raw = _line(_layoutRtl(['שלום.', 'abc', 'עולם']).reversed.toList());
-    final result = PdfHebrewTextNormalizer.normalize(raw);
-    expect(result.fullText.indexOf('cba'), greaterThanOrEqualTo(0));
-    expect(result.fullText.indexOf('עולם'), lessThan(result.fullText.indexOf('שלום.')));
-  });
-
-  group('numbers in a Hebrew line', () {
-    /// [words] as a reader sees them, right to left; digits run left to right as on a printed page.
-    /// Returns, per word, its glyphs in logical order with their x positions.
-    List<List<(String, double)>> page(List<String> words) {
-      final result = <List<(String, double)>>[];
-      var right = 500.0;
-      for (final word in words) {
-        final left = right - 10 * word.length;
-        final ltr = RegExp(r'^[0-9.:]+$').hasMatch(word);
-        result.add([for (var i = 0; i < word.length; i++) (word[i], ltr ? left + 10 * i : right - 10 * (i + 1))]);
-        right = left - 10;
-      }
-      return result;
-    }
-
-    PdfPageRawText store(List<List<(String, double)>> runs) {
-      final glyphs = <(String, double)>[];
-      for (final run in runs) {
-        if (glyphs.isNotEmpty) glyphs.add((' ', run.first.$2 - 10));
-        glyphs.addAll(run);
-      }
-      return _line(glyphs);
-    }
-
-    const lines = [
-      ['כיץ', '4', 'א', 'ו', 'אם', 'היה', '16', 'מחה'],
-      ['שלום', 'עולם', 'ומלואו', '123'],
-      ['שלום', 'עולם', '3.5', 'ומלואו'],
-    ];
-
-    test('a line whose words are stored left to right is reordered', () {
-      for (final line in lines) {
-        // OCR layers: each word in logical order, the words of the line left to right.
-        final raw = store(page(line).reversed.toList());
-        expect(PdfHebrewTextNormalizer.normalize(raw).fullText, line.join(' '));
-      }
-    });
-
-    test('a line stored fully in visual order is reversed, digits kept', () {
-      for (final line in lines) {
-        final glyphs = page(line).expand((run) => run).toList()..sort((a, b) => a.$2.compareTo(b.$2));
-        final words = <List<(String, double)>>[];
-        for (final g in glyphs) {
-          if (words.isEmpty || g.$2 - words.last.last.$2 > 10) words.add([]);
-          words.last.add(g);
-        }
-        final raw = store(words);
-        expect(PdfHebrewTextNormalizer.normalize(raw).fullText, line.join(' '));
-      }
-    });
-
-    test('a logical line with numbers is untouched', () {
-      for (final line in lines) {
-        final raw = store(page(line));
-        expect(PdfHebrewTextNormalizer.normalize(raw), same(raw));
-      }
-    });
-
-    // Logical number -> how it is drawn left to right in a Hebrew line (UAX #9): edge punctuation moves to the
-    // other side and brackets show mirrored, while digits, inner separators, `%` and `$` stay in place.
-    const numbers = {
-      '123,': ',123',
-      '16.': '.16',
-      '1,000.': '.1,000',
-      '-5': '5-',
-      '(16)': '(16)',
-      '[3]:': ':[3]',
-      '50%': '50%',
-      r'$5': r'$5',
-      '12:30': '12:30',
-    };
-
-    test('logical numeric punctuation survives word reordering', () {
-      final runs = page(['שלום', 'עולם', '123', 'ומלואו']);
-      // Correct RTL display geometry: comma left of the LTR digits.
-      // Extraction stores the token logically as 123, (comma last).
-      runs[2].add((',', runs[2].first.$2 - 10));
-      final raw = store(runs.reversed.toList());
-      expect(raw.fullText, 'ומלואו 123, עולם שלום');
-      final result = PdfHebrewTextNormalizer.normalize(raw);
-      expect(result.fullText, 'שלום עולם 123, ומלואו');
-      final comma = result.fullText.indexOf(',');
-      expect(result.charRects[comma], raw.charRects[raw.fullText.indexOf(',')]);
-    });
-
-    test('punctuation at the edge of a number is restored to logical order', () {
-      for (final MapEntry(key: logical, value: drawn) in numbers.entries) {
-        final line = ['שלום', 'עולם', logical, 'ומלואו'];
-        // OCR layer: Hebrew words in logical order, the number as drawn, the words of the line left to right.
-        final runs = page(line);
-        final left = runs[2].map((g) => g.$2).reduce((a, b) => a < b ? a : b);
-        runs[2] = [for (var i = 0; i < drawn.length; i++) (drawn[i], left + 10 * i)];
-        final ocr = store(runs.reversed.toList());
-        expect(PdfHebrewTextNormalizer.normalize(ocr).fullText, line.join(' '), reason: 'OCR $drawn');
-
-        // Fully visual: every glyph left to right, the number still as drawn.
-        final visual = store([for (final run in runs.reversed) List.of(run)..sort((a, b) => a.$2.compareTo(b.$2))]);
-        expect(PdfHebrewTextNormalizer.normalize(visual).fullText, line.join(' '), reason: 'visual $drawn');
-
-        // OCR layer storing the number logically: each character sits where it is drawn, so it stays as is.
-        final core = RegExp(r'[0-9#$%](.*[0-9#$%])?').firstMatch(logical)!;
-        final lead = core.start, trail = logical.length - core.end;
-        double xOf(int k) =>
-            left +
-            10 *
-                (k < core.start
-                    ? trail + (core.end - core.start) + (lead - 1 - k)
-                    : k < core.end
-                    ? trail + (k - core.start)
-                    : trail - 1 - (k - core.end));
-        runs[2] = [for (var k = 0; k < logical.length; k++) (logical[k], xOf(k))];
-        final stored = store(runs.reversed.toList());
-        expect(PdfHebrewTextNormalizer.normalize(stored).fullText, line.join(' '), reason: 'logical $logical');
-      }
-    });
   });
 
   test('points stay after their letter when a word is reversed', () {
@@ -320,5 +134,83 @@ void main() {
     }
     final fixed = PdfHebrewTextNormalizer.normalize(PdfPageRawText(text.toString(), rects));
     expect(fixed.fullText.split('\n'), ['שלום עולם ומלואו', 'ספר אחד']);
+  });
+
+  test('accent-heavy Latin text is left untouched when legacy decoding is disabled', () {
+    final text = List.filled(30, 'é').join();
+    final raw = _line([for (var i = 0; i < text.length; i++) (text[i], i * 10.0)]);
+    expect(PdfHebrewTextNormalizer.normalize(raw), same(raw));
+  });
+
+  void expectMapped(PdfPageRawText raw, [String? expected]) {
+    final result = PdfHebrewTextNormalizer.normalize(raw, decodeLegacyEncoding: true);
+    if (expected != null) expect(result.fullText, expected);
+    expect(result.charRects, hasLength(raw.charRects.length));
+    expect(result.charRects, unorderedEquals(raw.charRects));
+    for (var i = 0; i < result.charRects.length; i++) {
+      final original = raw.charRects.indexOf(result.charRects[i]);
+      expect(original, greaterThanOrEqualTo(0));
+      expect(result.fullText[i], raw.fullText[original]);
+    }
+  }
+
+  test('visual mixed tokens retain the established Hebrew search and glyph mapping', () {
+    for (final text in ['1םולש', '123םולש', 'םולש123', 'abcםולש', 'םולשabc']) {
+      final raw = _line([for (var i = 0; i < text.length; i++) (text[i], i * 10.0)]);
+      expectMapped(raw, text == '1םולש' ? 'שלום1' : null);
+      expect(PdfHebrewTextNormalizer.normalize(raw).fullText, contains('שלום'));
+    }
+  });
+
+  test('scanned Sanhedrin page 7 preserves phrase search and character mapping', () {
+    final raw = PdfPageRawText('16 מחה ו היה א אם כיץ 4', [
+      PdfRect(356.1709289550781, 742.00588378869, 358.05413818359375, 738.474877929315),
+      PdfRect(358.086181640625, 742.0165649410337, 360.3706359863281, 738.4267211910337),
+      PdfRect(347.0711669921875, 735.8248535152525, 347.0711669921875, 735.8248535152525),
+      PdfRect(341.191162109375, 740.52883300744, 345.295166015625, 735.808862304315),
+      PdfRect(335.5521545410156, 740.5368286129087, 339.16815185546875, 735.73684081994),
+      PdfRect(329.45013427734375, 740.5368286129087, 333.0741271972656, 735.73684081994),
+      PdfRect(400.5381164550781, 735.8248535152525, 400.5381164550781, 735.8248535152525),
+      PdfRect(397.7701110839844, 740.5368286129087, 399.0981140136719, 735.7848754879087),
+      PdfRect(379.8441162109375, 735.8248535152525, 379.8441162109375, 735.8248535152525),
+      PdfRect(374.1401062011719, 740.5368286129087, 377.76409912109375, 735.73684081994),
+      PdfRect(371.48211669921875, 740.5208374019712, 372.93011474609375, 737.976831054315),
+      PdfRect(366.1741027832031, 740.5368286129087, 369.798095703125, 735.73684081994),
+      PdfRect(404.6321716308594, 738.474877929315, 404.6321716308594, 738.474877929315),
+      PdfRect(400.80157470703125, 741.6420532222837, 403.5675048828125, 738.41066894494),
+      PdfRect(397.6661071777344, 735.8248535152525, 397.6661071777344, 735.8248535152525),
+      PdfRect(391.9381103515625, 740.5608764644712, 396.0740966796875, 735.7288452144712),
+      PdfRect(386.0740966796875, 740.5208374019712, 389.818115234375, 735.8248535152525),
+      PdfRect(566.485107421875, 736.1249023433775, 566.485107421875, 736.1249023433775),
+      PdfRect(563.9771118164062, 739.35891113244, 566.298095703125, 736.1249023433775),
+      PdfRect(562.3375854492188, 739.3534179683775, 563.3330688476562, 737.6043945308775),
+      PdfRect(559.9970703125, 739.35891113244, 562.5160522460938, 735.0854125972837),
+      PdfRect(558.880126953125, 736.1249023433775, 558.880126953125, 736.1249023433775),
+      PdfRect(556.2000732421875, 739.4148803707212, 558.5200805664062, 736.1249023433775),
+    ]);
+    expectMapped(raw, 'כיץ 4 א ו אם היה 16 מחה');
+  });
+
+  test('scanned Sanhedrin page 84 preserves phrase search and character mapping', () {
+    final raw = PdfPageRawText('ישראל 6חטא ליהושע', [
+      PdfRect(321.0251159667969, 434.6023156736046, 322.38262939453125, 432.2173059079796),
+      PdfRect(314.92462158203125, 434.60982299782336, 319.8896179199219, 430.199819335714),
+      PdfRect(309.86962890625, 434.6173303220421, 312.87713623046875, 430.16231323219836),
+      PdfRect(304.525146484375, 434.63982177712023, 308.40264892578125, 430.10982299782336),
+      PdfRect(299.33514404296875, 436.3573205564171, 302.5001525878906, 430.1023156736046),
+      PdfRect(350.9796447753906, 432.699819335714, 350.9796447753906, 432.699819335714),
+      PdfRect(348.0146484375, 436.00981689430773, 350.149658203125, 432.6548059079796),
+      PdfRect(342.3176574707031, 434.6173303220421, 345.7076416015625, 430.1173303220421),
+      PdfRect(336.1226501464844, 434.60982299782336, 339.9476623535156, 430.199819335714),
+      PdfRect(330.15216064453125, 434.63982177712023, 334.0296630859375, 430.10982299782336),
+      PdfRect(383.6846618652344, 430.199819335714, 383.6846618652344, 430.199819335714),
+      PdfRect(378.75714111328125, 436.3573205564171, 381.9221496582031, 430.1023156736046),
+      PdfRect(376.40216064453125, 434.6023156736046, 377.7596740722656, 432.2173059079796),
+      PdfRect(370.9666748046875, 434.6173303220421, 374.3641662597656, 430.1173303220421),
+      PdfRect(367.9966735839844, 434.6173303220421, 369.2416687011719, 430.16231323219836),
+      PdfRect(361.9516906738281, 434.60982299782336, 366.91668701171875, 430.199819335714),
+      PdfRect(356.3871765136719, 434.6173303220421, 359.97216796875, 430.199819335714),
+    ]);
+    expectMapped(raw, 'ליהושע 6חטא ישראל');
   });
 }

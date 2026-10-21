@@ -16,11 +16,10 @@ import 'pdf_text.dart';
 ///
 /// Character boxes are permuted together with the text, so indices into the
 /// result still address the right glyphs.
-/// Mixed-script tokens and lines are preserved conservatively rather than applying a full bidi algorithm.
+/// This preserves Otzaria's established extraction order; mixed-script and
+/// numeric-punctuation limitations remain unchanged.
 abstract final class PdfHebrewTextNormalizer {
   /// Returns [text] in logical order, or [text] itself when nothing changed.
-  /// [decodeLegacyEncoding] enables a heuristic for broken legacy font maps.
-  /// Leave it disabled for documents that may contain accented Latin text.
   static PdfPageRawText normalize(PdfPageRawText text, {bool decodeLegacyEncoding = false}) {
     final (fullText, charRects) = _normalize(text.fullText, text.charRects, decodeLegacyEncoding);
     if (identical(fullText, text.fullText)) return text;
@@ -58,7 +57,6 @@ const _minPairs = 2;
   var pageLtr = 0, pageRtl = 0;
   for (final (s, e) in lines) {
     for (final (ts, te) in _tokens(codes, s, e)) {
-      if (!_isHebrewToken(codes, ts, te)) continue;
       final v = _letterVote(codes, boxes, ts, te);
       if (v.total == 0) continue;
       wordVotes.add((ts, te, v));
@@ -80,16 +78,6 @@ const _minPairs = 2;
   pageLtr = 0;
   pageRtl = 0;
   for (final (s, e) in lines) {
-    final tokens = _tokens(codes, s, e);
-    // Mixed scripts and separate physical lines need a full bidi/layout model.
-    // Preserve their order rather than sorting unrelated runs by x alone.
-    // Numbers in a Hebrew line take its direction (bidi rule N1), so each one sorts by x like a Hebrew word.
-    if (tokens.any((t) => !_isHebrewToken(codes, t.$1, t.$2) && !_isNumberToken(codes, t.$1, t.$2))) continue;
-    if (tokens.any(
-      (t) => !_sameLine(_tokenBox(boxes, tokens.first.$1, tokens.first.$2), _tokenBox(boxes, t.$1, t.$2)),
-    )) {
-      continue;
-    }
     final v = _wordVote(codes, boxes, s, e);
     if (v.total == 0) continue;
     lineVotes.add((s, e, v));
@@ -113,51 +101,6 @@ bool _isVisual(_Vote v, bool pageVisual) {
   if (v.rtl > 0) return false;
   return v.total >= _minPairs || pageVisual;
 }
-
-/// Hebrew letters, points and punctuation only; Latin letters, digits and other scripts make a token mixed.
-bool _isHebrewToken(List<int> codes, int start, int end) {
-  return codes.getRange(start, end).every((c) => _isHebLetter(c) || _isHebMark(c) || _isPunctuation(c));
-}
-
-/// ASCII digits with optional punctuation, such as `16`, `3.5` or `12:30`.
-bool _isNumberToken(List<int> codes, int start, int end) {
-  final range = codes.getRange(start, end);
-  return range.any(_isDigit) && range.every((c) => _isDigit(c) || _isPunctuation(c));
-}
-
-bool _isDigit(int c) => c >= 0x30 && c <= 0x39;
-
-/// Digits and the terminators that join an adjacent number (`#`, `$`, `%`).
-bool _isNumberCore(int c) => _isDigit(c) || c == 0x23 || c == 0x24 || c == 0x25;
-
-const _mirrored = {
-  0x28: 0x29,
-  0x29: 0x28,
-  0x3C: 0x3E,
-  0x3E: 0x3C,
-  0x5B: 0x5D,
-  0x5D: 0x5B,
-  0x7B: 0x7D,
-  0x7D: 0x7B,
-  0xAB: 0xBB,
-  0xBB: 0xAB,
-};
-
-/// Punctuation that Hebrew text carries inside its words: periods, colons, quotes, geresh and gershayim, maqaf.
-bool _isPunctuation(int c) =>
-    (c >= 0x21 && c <= 0x2F) ||
-    (c >= 0x3A && c <= 0x40) ||
-    (c >= 0x5B && c <= 0x60) ||
-    (c >= 0x7B && c <= 0x7E) ||
-    c == 0xAB ||
-    c == 0xBB ||
-    c == 0x05BE ||
-    c == 0x05C0 ||
-    c == 0x05C3 ||
-    c == 0x05C6 ||
-    c == 0x05F3 ||
-    c == 0x05F4 ||
-    (c >= 0x2010 && c <= 0x2027);
 
 class _Vote {
   const _Vote(this.ltr, this.rtl);
@@ -249,42 +192,9 @@ void _reorderLine(List<int> codes, List<PdfRect> boxes, int start, int end) {
     }
   }
 
-  // Digits keep their order, but punctuation at a number's edge takes the line's direction (UAX #9 W4, W5, N1):
-  // `,123` stored left to right is logical `123,`. Brackets swap sides, so they are mirrored.
-  void copyToken(int s, int e) {
-    if (!_isNumberToken(codes, s, e)) return copy(s, e);
-    var cs = s, ce = e;
-    while (!_isNumberCore(codes[cs])) {
-      cs++;
-    }
-    while (!_isNumberCore(codes[ce - 1])) {
-      ce--;
-    }
-    // Only a token whose edge punctuation lies where the text order puts it is stored as drawn; a logical
-    // or ambiguous one is kept as is.
-    final core = _tokenBox(boxes, cs, ce);
-    bool drawn(int i) => _sameLine(boxes[i], core) && (i < cs ? _cx(boxes[i]) < core.left : _cx(boxes[i]) > core.right);
-    for (var i = s; i < e; i++) {
-      if ((i < cs || i >= ce) && !drawn(i)) return copy(s, e);
-    }
-
-    void copyEdge(int i) {
-      newCodes.add(_mirrored[codes[i]] ?? codes[i]);
-      newBoxes.add(boxes[i]);
-    }
-
-    for (var i = e - 1; i >= ce; i--) {
-      copyEdge(i);
-    }
-    copy(cs, ce);
-    for (var i = cs - 1; i >= s; i--) {
-      copyEdge(i);
-    }
-  }
-
   for (var k = 0; k < tokens.length; k++) {
     copy(k == 0 ? start : tokens[k - 1].$2, tokens[k].$1);
-    copyToken(sorted[k].$1, sorted[k].$2);
+    copy(sorted[k].$1, sorted[k].$2);
   }
   copy(tokens.last.$2, end);
   codes.setRange(start, end, newCodes);
