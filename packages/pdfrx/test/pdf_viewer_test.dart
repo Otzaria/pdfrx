@@ -132,6 +132,40 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   });
 
+  testWidgets('repaints reuse a pending partial render with the same rectangle and scale', (tester) async {
+    final document = _TestDocument(1);
+    addTearDown(document.dispose);
+    final control = (document.pages.single as _TestPage).renderControl..block();
+    final controller = PdfViewerController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PdfViewer(
+          PdfDocumentRefDirect(document, autoDispose: false),
+          controller: controller,
+          params: const PdfViewerParams(
+            behaviorControlParams: PdfViewerBehaviorControlParams(
+              enableLowResolutionPagePreview: false,
+              partialImageLoadingDelay: Duration.zero,
+            ),
+          ),
+        ),
+      ),
+    );
+    await _pumpPaintWork(tester);
+    final count = control.renderCount;
+    expect(count, greaterThan(0));
+    for (var i = 0; i < 10; i++) {
+      controller.invalidate();
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(control.renderCount, count);
+    expect(control.tokens.last.isCanceled, isFalse);
+    control.release();
+    await _pumpPaintWork(tester);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 100));
+  });
+
   testWidgets('an initially hidden viewer defers page work and resumes at the same page', (tester) async {
     final document = _TestDocument(9);
     addTearDown(document.dispose);
