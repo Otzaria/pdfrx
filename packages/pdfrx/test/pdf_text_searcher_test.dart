@@ -639,6 +639,22 @@ void main() {
     await pumpEventQueue();
     expect(searcher.matches.map((m) => m.pageNumber), [1, 2, 3]);
   });
+  test('a page loading after a completed page has no published match range', () async {
+    final searcher = _GatedSearcher(_FakeController(_FakeDocument(2)), {1: 'word', 2: 'word'});
+    addTearDown(searcher.dispose);
+    final gate = searcher.gates[2] = Completer<void>();
+    searcher.startTextSearch('word', goToFirstMatch: false, searchImmediately: true);
+    await pumpEventQueue();
+    expect(searcher.loadOrder, [1, 2]);
+    expect(searcher.getMatchesRangeForPage(1), (start: 0, end: 1));
+    expect(searcher.getMatchesRangeForPage(2), isNull);
+    expect(searcher.matches.length, 1);
+    gate.complete();
+    await pumpEventQueue();
+    expect(searcher.getMatchesRangeForPage(2), (start: 1, end: 2));
+    expect(searcher.matches.map((match) => match.pageNumber), [1, 2]);
+  });
+
   test('a custom Pattern is matched against the full text of each page', () async {
     final searcher = _GatedSearcher(_FakeController(_FakeDocument(3)), {1: 'word and word', 2: 'WORD', 3: 'a word'});
     addTearDown(searcher.dispose);

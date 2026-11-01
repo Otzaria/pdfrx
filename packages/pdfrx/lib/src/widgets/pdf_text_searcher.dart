@@ -437,7 +437,7 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
 
   /// Get the matches range for the given page number.
   ({int start, int end})? getMatchesRangeForPage(int pageNumber) {
-    if (_matchesPageStartIndices.length < pageNumber) return null;
+    if (_completedPageCount < pageNumber) return null;
     final start = _matchesPageStartIndices[pageNumber - 1];
     final end = _matchesPageStartIndices.length > pageNumber ? _matchesPageStartIndices[pageNumber] : _matches.length;
     return (start: start, end: end);
