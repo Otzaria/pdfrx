@@ -37,7 +37,7 @@ class PdfTextSearcher extends _PdfTextSearcherBase<PdfPageTextRange> {
 /// Use [loadText] only when full page text or selection geometry is needed.
 class PdfTextSearchSession extends _PdfTextSearcherBase<PdfTextSearchResult> {
   /// Creates a lightweight search session with bounded context for each match.
-  PdfTextSearchSession(super.controller, {this.contextLength = 80, super.notificationInterval})
+  PdfTextSearchSession(super.controller, {this.contextLength = 80, super.notificationInterval, super.onNavigateToMatch})
     : assert(contextLength >= 0);
 
   /// Maximum context characters retained on each side of a match.
@@ -58,7 +58,11 @@ class PdfTextSearchSession extends _PdfTextSearcherBase<PdfTextSearchResult> {
 }
 
 abstract class _PdfTextSearcherBase<T> extends Listenable {
-  _PdfTextSearcherBase(this._controller, {this.notificationInterval = const Duration(milliseconds: 100)}) {
+  _PdfTextSearcherBase(
+    this._controller, {
+    this.notificationInterval = const Duration(milliseconds: 100),
+    this.onNavigateToMatch,
+  }) {
     _registerForDocumentChanges();
   }
 
@@ -71,6 +75,9 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
 
   /// Minimum interval between progress notifications, excluding first and final results.
   final Duration notificationInterval;
+
+  /// Optional match navigation, replacing ensureVisible while preserving selection state.
+  final Future<void> Function(PdfViewerController controller, T match)? onNavigateToMatch;
 
   /// The [PdfViewerController] to use.
   PdfViewerController? get controller => _controller.isReady ? _controller : null;
@@ -156,8 +163,8 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
 
   /// Start a new search.
   ///
-  /// [pattern] is the text to search for. It can be a [String] or a [RegExp].
-  /// If [caseInsensitive] is true, the search will be case insensitive.
+  /// [pattern] is matched against each page. Custom patterns use [Pattern.allMatches] and compare with `==`.
+  /// [caseInsensitive] applies only to [String] patterns.
   /// If [goToFirstMatch] is true, the viewer will automatically go to the first match.
   /// If [searchImmediately] is true, the search will start immediately,
   /// otherwise it will wait for a short delay not to make the process too heavy.
@@ -295,7 +302,11 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
         if (searchSession != _searchSession) return;
         _searchedPages.add(page.pageNumber);
         if (pageText != null) {
-          await for (final f in pageText.allMatches(condition.pattern, caseInsensitive: condition.caseInsensitive)) {
+          await for (final f in _allMatchesOf(
+            pageText,
+            condition.pattern,
+            caseInsensitive: condition.caseInsensitive,
+          )) {
             if (searchSession != _searchSession) return;
             textMatches.add(_createMatch(f));
           }
@@ -402,13 +413,25 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
   }
 
   Future<void> _navigateToMatch(T match) async {
+    final navigationSession = _searchSession;
+    final controller = this.controller;
     _currentMatch = match;
-    await controller?.ensureVisible(
-      controller!.calcRectForRectInsidePage(pageNumber: _pageNumberOf(match), rect: _boundsOf(match)),
-      margin: 50,
-    );
-    controller?.setCurrentPageNumber(_pageNumberOf(match));
-    controller?.invalidate();
+    if (controller != null) {
+      final navigate = onNavigateToMatch;
+      if (navigate != null) {
+        await navigate(controller, match);
+      } else {
+        await controller.ensureVisible(
+          controller.calcRectForRectInsidePage(pageNumber: _pageNumberOf(match), rect: _boundsOf(match)),
+          margin: 50,
+        );
+      }
+    }
+    if (_disposed || navigationSession != _searchSession || !identical(_currentMatch, match)) {
+      return;
+    }
+    this.controller?.setCurrentPageNumber(_pageNumberOf(match));
+    this.controller?.invalidate();
     notifyListeners();
   }
 
@@ -488,7 +511,7 @@ extension _PatternExts on Pattern {
       case RegExp r:
         return r.pattern.isEmpty;
       default:
-        throw UnsupportedError('Pattern type not supported: $this');
+        return false;
     }
   }
 }
@@ -511,8 +534,20 @@ bool _isIdenticalPattern(Pattern? a, Pattern? b) {
         a.isUnicode == b.isUnicode &&
         a.isDotAll == b.isDotAll;
   }
-  if (a == null && b == null) {
-    return true;
+  if (a is String || a is RegExp || b is String || b is RegExp) {
+    return false;
   }
-  return false;
+  return a == b;
+}
+
+Stream<PdfPageTextRange> _allMatchesOf(PdfPageText pageText, Pattern pattern, {required bool caseInsensitive}) {
+  if (pattern is String || pattern is RegExp) {
+    return pageText.allMatches(pattern, caseInsensitive: caseInsensitive);
+  }
+  return Stream.fromIterable(
+    pattern
+        .allMatches(pageText.fullText)
+        .where((match) => match.start != match.end)
+        .map((match) => PdfPageTextRange(pageText: pageText, start: match.start, end: match.end)),
+  );
 }
