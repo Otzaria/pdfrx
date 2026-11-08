@@ -35,7 +35,7 @@ jobs:
       - run: flutter pub get
       - name: Check viewer formatting
         working-directory: packages/pdfrx
-        run: dart format --output=write lib/src/widgets/pdf_text_searcher.dart lib/src/widgets/pdf_image_cache_budget.dart test/pdf_text_searcher_test.dart test/pdf_image_cache_budget_test.dart test/pdf_viewer_test.dart
+        run: dart format --output=write lib/src/widgets/pdf_text_searcher.dart lib/src/widgets/pdf_image_cache_budget.dart test/pdf_text_searcher_test.dart test/pdf_image_cache_budget_test.dart test/pdf_viewer_test.dart test/pdf_document_ref_abandoned_load_test.dart
       - name: View widget formatter changes
         run: git diff --stat && git diff -- packages/pdfrx
       - name: Analyze viewer

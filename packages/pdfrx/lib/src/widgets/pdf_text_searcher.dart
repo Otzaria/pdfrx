@@ -97,6 +97,7 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
   int? _searchingPageNumber;
   int? _totalPageCount;
   bool _isSearching = false;
+  Object? _searchError;
   StreamSubscription<PdfDocumentEvent>? _documentEventSubscription;
   PdfDocument? _observedDocument;
   final _searchedPages = <int>{};
@@ -113,6 +114,9 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
 
   /// Whether the search task is currently running or not
   bool get isSearching => _isSearching;
+
+  /// Last page-extraction error, null after a new successful search begins.
+  Object? get searchError => _searchError;
 
   /// Whether searches may run. Inactive sessions retain results and queue the latest request.
   bool get isActive => _isActive;
@@ -156,8 +160,8 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
 
   void notifyListeners() {
     controller?.invalidate();
-    for (final listener in _listeners) {
-      listener();
+    for (final listener in List<VoidCallback>.of(_listeners)) {
+      if (_listeners.contains(listener)) listener();
     }
   }
 
@@ -181,7 +185,8 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
     _searchTextTimer?.cancel();
     _pendingSearchCondition = null;
     final last = _lastSearchCondition;
-    if (last != null && last.caseInsensitive == caseInsensitive && _isIdenticalPattern(last.pattern, pattern)) {
+    if (_searchError == null &&
+        last != null && last.caseInsensitive == caseInsensitive && _isIdenticalPattern(last.pattern, pattern)) {
       return;
     }
 
@@ -204,6 +209,7 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
     _pendingSearchCondition = null;
     _pausedSearchCondition = null;
     _lastSearchCondition = condition;
+    _searchError = null;
     if (!resume) {
       _matches = const [];
       _matchesPageStartIndices = const [];
@@ -253,6 +259,7 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
     _currentIndex = null;
     _currentMatch = null;
     _isSearching = false;
+    _searchError = null;
     _lastSearchCondition = null;
     _pendingSearchCondition = null;
     _pausedSearchCondition = null;
@@ -271,7 +278,8 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
 
   Future<void> _startTextSearchInternal(_SearchCondition condition, int searchSession, {bool resume = false}) async {
     _isSearching = controller != null;
-    await controller?.useDocument((document) async {
+    try {
+      await controller?.useDocument((document) async {
       if (searchSession != _searchSession) return;
       final textMatches = resume ? List<T>.of(_matches) : <T>[];
       final textMatchesPageStartIndex = resume ? _matchesPageStartIndices.take(_completedPageCount).toList() : <int>[];
@@ -330,7 +338,16 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
           }
         }
       }
-    });
+      });
+    } catch (error) {
+      // Do not strand the spinner after an unawaited page extraction fails.
+      if (!_disposed && searchSession == _searchSession) {
+        _searchError = error;
+        _isSearching = false;
+        _searchingPageNumber = null;
+        notifyListeners();
+      }
+    }
   }
 
   void _registerForDocumentChanges() {
