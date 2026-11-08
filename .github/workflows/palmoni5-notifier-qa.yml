@@ -1,0 +1,23 @@
+name: palmoni5 listener teardown QA
+on:
+  push:
+    branches: [palmoni5/notifier-qa-20261108]
+jobs:
+  viewer-notifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Check formatting
+        working-directory: packages/pdfrx
+        run: dart format --output=none --set-exit-if-changed lib/src/pdf_document_ref.dart lib/src/widgets/pdf_text_searcher.dart test/pdf_document_ref_abandoned_load_test.dart test/pdf_text_searcher_test.dart
+      - name: Analyzer
+        working-directory: packages/pdfrx
+        run: flutter analyze
+      - name: Listener teardown regression tests
+        working-directory: packages/pdfrx
+        run: flutter test test/pdf_document_ref_abandoned_load_test.dart test/pdf_text_searcher_test.dart
