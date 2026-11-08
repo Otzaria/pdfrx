@@ -13,7 +13,7 @@ class PdfiumFileWriteHelperPthread implements PdfiumFileWriteHelper {
   @override
   Future<int> create(int writeBlock) async {
     final buffer = malloc<Uint8>(
-      sizeOf<pdfium_bindings.FPDF_FILEWRITE>() + sizeOfPthreadMutex + sizeOfPthreadCond + sizeOf<IntPtr>() * 2,
+      sizeOf<pdfium_bindings.FPDF_FILEWRITE>() + sizeOfPthreadMutex + sizeOfPthreadCond + sizeOf<IntPtr>() * 3,
     );
     final fw = buffer.cast<pdfium_bindings.FPDF_FILEWRITE>();
     fw.ref.version = 1;
@@ -40,6 +40,7 @@ class PdfiumFileWriteHelperPthread implements PdfiumFileWriteHelper {
     pthread_mutex_lock(fwAddress + _mutexOffsetWrite);
     final returnValue = Pointer<IntPtr>.fromAddress(fwAddress + _retValueOffsetWrite);
     returnValue.value = value;
+    Pointer<IntPtr>.fromAddress(fwAddress + _completedOffsetWrite).value = 1;
     pthread_cond_signal(fwAddress + _condOffsetWrite);
     pthread_mutex_unlock(fwAddress + _mutexOffsetWrite);
   }
@@ -65,10 +66,13 @@ int _write(Pointer<Void> pThis, Pointer<Void> pData, int size) {
   ).asFunction<void Function(Pointer<Void>, int)>();
 
   pthread_mutex_lock(cs);
-  // Call Dart side write function. The call is returned immediately (it runs asynchronously)
+  // Guard against spurious condition-variable wakeups.
+  final completed = Pointer<IntPtr>.fromAddress(fwAddress + _completedOffsetWrite);
+  completed.value = 0;
   writeFunc(pData, size);
-  // So, we should wait for Dart to signal completion
-  pthread_cond_wait(cv, cs);
+  while (completed.value == 0) {
+    pthread_cond_wait(cv, cs);
+  }
   final returnValue = Pointer<IntPtr>.fromAddress(fwAddress + _retValueOffsetWrite).value;
   pthread_mutex_unlock(cs);
   return returnValue;
@@ -85,3 +89,6 @@ final _writeFuncOffset = _condOffsetWrite + sizeOfPthreadCond;
 
 /// return-value offset within FPDF_FILEWRITE
 final _retValueOffsetWrite = _writeFuncOffset + sizeOf<IntPtr>();
+
+/// Callback completion predicate (must be guarded by the mutex).
+final _completedOffsetWrite = _retValueOffsetWrite + sizeOf<IntPtr>();
