@@ -15,7 +15,7 @@ jobs:
       - run: flutter pub get
       - name: Check engine formatting
         working-directory: packages/pdfrx_engine
-        run: dart format --output=write lib/src/native/http_cache_control.dart lib/src/native/pdf_file_cache.dart lib/src/pdf_text.dart lib/src/pdf_rect.dart test/http_cache_control_test.dart test/pdf_file_cache_range_test.dart test/pdf_text_hash_test.dart test/pdf_rect_range_test.dart
+        run: dart format --output=write lib/src/native/http_cache_control.dart lib/src/native/pdf_file_cache.dart lib/src/native/pdfium_file_access.dart lib/src/native/pdfium_file_write.dart lib/src/native/pdfium_io_result.dart lib/src/pdf_text.dart lib/src/pdf_rect.dart test/http_cache_control_test.dart test/pdf_file_cache_range_test.dart test/pdf_text_hash_test.dart test/pdf_rect_range_test.dart test/pdfium_io_result_test.dart
       - name: View formatter changes
         run: git diff --stat && git diff -- packages/pdfrx_engine
       - name: Analyze engine
@@ -23,7 +23,7 @@ jobs:
         run: dart analyze
       - name: Targeted engine regression tests
         working-directory: packages/pdfrx_engine
-        run: dart test test/http_cache_control_test.dart test/pdf_file_cache_range_test.dart test/pdf_text_hash_test.dart test/pdf_rect_range_test.dart
+        run: dart test test/http_cache_control_test.dart test/pdf_file_cache_range_test.dart test/pdf_text_hash_test.dart test/pdf_rect_range_test.dart test/pdfium_io_result_test.dart test/pdf_document_test.dart
   viewer-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 25
