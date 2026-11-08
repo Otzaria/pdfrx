@@ -3,6 +3,7 @@ import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'pdfium_io_result.dart';
 import 'pthread/file_access.dart';
 import 'win32/file_access.dart';
 
@@ -18,15 +19,20 @@ class PdfiumFileAccess {
     void readAndSignal(int position, Pointer<Uint8> buffer, int size) async {
       try {
         final readSize = await read(buffer.asTypedList(size), position, size);
-        PdfiumFileAccessHelper.instance.setValue(fa.fileAccess, readSize);
+        PdfiumFileAccessHelper.instance.setValue(fa.fileAccess, pdfiumTransferStatus(readSize, size));
       } catch (e) {
-        PdfiumFileAccessHelper.instance.setValue(fa.fileAccess, -1);
+        PdfiumFileAccessHelper.instance.setValue(fa.fileAccess, 0);
       }
     }
 
     fa._nativeCallable = _NativeFileReadCallable.listener(readAndSignal);
-    fa.fileAccess = await PdfiumFileAccessHelper.instance.create(fileSize, fa._nativeCallable.nativeFunction.address);
-    return fa;
+    try {
+      fa.fileAccess = await PdfiumFileAccessHelper.instance.create(fileSize, fa._nativeCallable.nativeFunction.address);
+      return fa;
+    } catch (_) {
+      fa._nativeCallable.close();
+      rethrow;
+    }
   }
 
   /// Disposes the file access structure and associated resources.
