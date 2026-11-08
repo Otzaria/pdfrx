@@ -131,6 +131,9 @@ class PdfImageReservation {
     final budget = _budget;
     if (budget == null) throw StateError('Image reservation has already been released');
     dispose();
+    // Late render completions must not resurrect a cache entry after the
+    // shared owner was torn down. The caller still owns/disposes its image.
+    if (budget._disposed) return null;
     if (!isPinned && budget.estimatedBytes + retainedBytes > budget.maximumBytes) return null;
     final entry = PdfImageCacheEntry._(budget, retainedBytes, onEvict, isPinned);
     budget._entries.add(entry);
