@@ -1,0 +1,42 @@
+name: palmoni5 pdfrx integration QA
+on:
+  push:
+    branches:
+      - palmoni5/integration-qa-20261108
+jobs:
+  engine-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Check engine formatting
+        working-directory: packages/pdfrx_engine
+        run: dart format --output=none --set-exit-if-changed lib/src/native/http_cache_control.dart lib/src/native/pdf_file_cache.dart lib/src/pdf_text.dart lib/src/pdf_rect.dart test/http_cache_control_test.dart test/pdf_file_cache_range_test.dart test/pdf_text_hash_test.dart test/pdf_rect_range_test.dart
+      - name: Analyze engine
+        working-directory: packages/pdfrx_engine
+        run: dart analyze
+      - name: Targeted engine regression tests
+        working-directory: packages/pdfrx_engine
+        run: dart test test/http_cache_control_test.dart test/pdf_file_cache_range_test.dart test/pdf_text_hash_test.dart test/pdf_rect_range_test.dart
+  viewer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Check viewer formatting
+        working-directory: packages/pdfrx
+        run: dart format --output=none --set-exit-if-changed lib/src/widgets/pdf_text_searcher.dart lib/src/widgets/pdf_image_cache_budget.dart test/pdf_text_searcher_test.dart test/pdf_image_cache_budget_test.dart
+      - name: Analyze viewer
+        working-directory: packages/pdfrx
+        run: flutter analyze
+      - name: Targeted viewer regression tests
+        working-directory: packages/pdfrx
+        run: flutter test test/pdf_text_searcher_test.dart test/pdf_image_cache_budget_test.dart

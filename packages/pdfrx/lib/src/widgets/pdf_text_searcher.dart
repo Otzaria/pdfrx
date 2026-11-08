@@ -383,6 +383,7 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
 
   /// Go to the previous match.
   Future<int> goToPrevMatch() async {
+    if (_matches.isEmpty) return -1;
     if (_currentIndex == null) {
       _currentIndex = _matches.length - 1;
       return await goToMatchOfIndex(_currentIndex!);
@@ -396,6 +397,7 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
 
   /// Go to the next match.
   Future<int> goToNextMatch() async {
+    if (_matches.isEmpty) return -1;
     if (_currentIndex == null) {
       _currentIndex = 0;
       return await goToMatchOfIndex(_currentIndex!);
@@ -437,7 +439,9 @@ abstract class _PdfTextSearcherBase<T> extends Listenable {
 
   /// Get the matches range for the given page number.
   ({int start, int end})? getMatchesRangeForPage(int pageNumber) {
-    if (_completedPageCount < pageNumber) return null;
+    if (pageNumber <= 0 || pageNumber > _matchesPageStartIndices.length || _completedPageCount < pageNumber) {
+      return null;
+    }
     final start = _matchesPageStartIndices[pageNumber - 1];
     final end = _matchesPageStartIndices.length > pageNumber ? _matchesPageStartIndices[pageNumber] : _matches.length;
     return (start: start, end: end);

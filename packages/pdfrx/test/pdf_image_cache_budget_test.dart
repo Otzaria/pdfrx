@@ -2,6 +2,32 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 void main() {
+  test('late image completions cannot resurrect a disposed shared budget', () {
+    final budget = PdfImageCacheBudget(maximumBytes: 100);
+    var evictions = 0;
+    final pending = budget.tryReserve(60)!;
+    final retained = budget.tryReserve(30)!.commit(retainedBytes: 30, onEvict: () => evictions++)!;
+    budget.dispose();
+
+    expect(pending.commit(retainedBytes: 60, onEvict: () => fail('Rejected result should not be owned')), isNull);
+    expect(budget.pendingBytes, 0);
+    expect(budget.retainedBytes, 30);
+    expect(evictions, 0);
+    expect(budget.tryReserve(1), isNull);
+
+    retained.dispose();
+    expect(budget.retainedBytes, 0);
+    expect(budget.estimatedBytes, 0);
+  });
+
+  test('a late pinned image cannot bypass disposal', () {
+    final budget = PdfImageCacheBudget(maximumBytes: 10);
+    final pending = budget.tryReserve(50, allowOverBudget: true)!;
+    budget.dispose();
+    expect(pending.commit(retainedBytes: 50, isPinned: true, onEvict: () {}), isNull);
+    expect(budget.estimatedBytes, 0);
+  });
+
   test('capacity notifications are deferred, coalesced and safe after disposal', () async {
     final budget = PdfImageCacheBudget(maximumBytes: 100);
     var notifications = 0;

@@ -340,6 +340,8 @@ Future<PdfDocument> pdfDocumentFromUri(
         timeout: timeout,
       );
       if (result.isFullDownload) {
+        await resolvedCache.close();
+        httpClientWrapper.reset();
         return await entryFunctions.openFile(
           resolvedCache.filePath,
           passwordProvider: passwordProvider,
@@ -497,6 +499,9 @@ Future<_DownloadResult> _downloadBlock(
     throw PdfException('Failed to download PDF file: $e');
   }
   if (response.statusCode == 304) {
+    if (!addCacheControlHeaders || !cache.isInitialized) {
+      throw const PdfException('Unexpected HTTP 304 without cached document revalidation');
+    }
     return _DownloadResult(cache.fileSize, false, true);
   }
 
@@ -508,15 +513,29 @@ Future<_DownloadResult> _downloadBlock(
     await cache.invalidateCache();
   }
 
-  final contentRange = response.headers['content-range'];
-  var isFullDownload = false;
-  if (contentRange != null) {
-    final m = RegExp(r'bytes (\d+)-(\d+)/(\d+)').firstMatch(contentRange);
-    fileSize = int.parse(m!.group(3)!);
-  } else {
-    // The server does not support range request and returns the whole file.
+  final isFullDownload = response.statusCode == 200;
+  if (isFullDownload) {
+    // A server may ignore Range, but a full response starts at byte zero.
+    if (blockOffset != 0) {
+      throw const PdfException('Server ignored a nonzero PDF byte-range request');
+    }
     fileSize = response.contentLength;
-    isFullDownload = true;
+  } else {
+    // Only the exact requested interval is safe to write to this cache block.
+    final contentRange = response.headers['content-range'];
+    final match = contentRange == null
+        ? null
+        : RegExp(r'^bytes (\d+)-(\d+)/(\d+)$').firstMatch(contentRange.trim());
+    if (match == null) throw const PdfException('Missing or invalid PDF Content-Range');
+    final start = int.parse(match.group(1)!);
+    final last = int.parse(match.group(2)!);
+    fileSize = int.parse(match.group(3)!);
+    if (start != blockOffset || fileSize <= 0 || last != min(end, fileSize) - 1) {
+      throw const PdfException('PDF Content-Range does not match requested bytes');
+    }
+    if (cache.isInitialized && !addCacheControlHeaders && cache.fileSize != fileSize) {
+      throw const PdfException('PDF size changed during ranged download');
+    }
   }
   if (!cache.isInitialized) {
     await cache.initializeWithFileSize(fileSize ?? 0, truncateExistingContent: true);
@@ -527,6 +546,10 @@ Future<_DownloadResult> _downloadBlock(
   var cachedBytesSoFar = cache.cachedBytes;
   var bytesThisRequest = 0;
   await for (final bytes in response.stream) {
+    final expectedBytes = isFullDownload ? fileSize : min(cache.blockSize * blockCount, cache.fileSize - blockOffset);
+    if (expectedBytes != null && bytesThisRequest + bytes.length > expectedBytes) {
+      throw const PdfException('PDF HTTP response exceeds the requested length');
+    }
     await cache.write(offset, bytes);
     offset += bytes.length;
     cachedBytesSoFar += bytes.length;
@@ -536,25 +559,23 @@ Future<_DownloadResult> _downloadBlock(
   }
 
   if (isFullDownload) {
-    if (fileSize != null) {
-      if (fileSize != cache.fileSize) {
-        throw PdfException('File size mismatch after full download: expected $fileSize, got ${cache.fileSize}');
-      }
-    } else {
-      fileSize = cachedBytesSoFar;
+    // A truncated full response must never be marked wholly cached.
+    if (fileSize != null && bytesThisRequest != fileSize) {
+      throw PdfException('Incomplete PDF download: expected $fileSize bytes, got $bytesThisRequest');
     }
+    fileSize ??= bytesThisRequest;
     await cache.initializeWithFileSize(fileSize, truncateExistingContent: false);
     await cache.setCached(0, lastBlock: cache.totalBlocks - 1);
   } else {
-    // Mark only what actually arrived. A block marked resident on bytes that
-    // never landed is unrecoverable: every later read is served from the cache
-    // file, returns the zeroes sitting in the hole, and the page renders blank
-    // with no error and no retry. Short responses should not happen against a
-    // well-behaved server, which is exactly why this needs to be loud.
     final bytesExpected = min(cache.blockSize * blockCount, cache.fileSize - blockOffset);
-    if (bytesThisRequest < bytesExpected) {
-      final blocksFilled = bytesThisRequest ~/ cache.blockSize;
-      if (Pdfrx.debugLazyLoading) {
+    if (bytesThisRequest != bytesExpected) {
+      // The pending reader must not consume a sparse hole as zero-filled PDF.
+      throw PdfException('Incomplete PDF range: expected $bytesExpected bytes, got $bytesThisRequest');
+    }
+    await cache.setCached(blockId, lastBlock: blockId + blockCount - 1);
+  }
+
+  if (Pdfrx.debugLazyLoading) {
         pdfrxLazyLog(
           'FETCH block $blockId SHORT -- asked for ${_fmtBytes(bytesExpected)}, got '
           '${_fmtBytes(bytesThisRequest)}; marking $blocksFilled of $blockCount block(s) resident '
