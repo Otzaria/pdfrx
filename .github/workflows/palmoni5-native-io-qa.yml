@@ -1,0 +1,35 @@
+name: palmoni5 native IO integration QA
+on:
+  push:
+    branches: [palmoni5/native-io-integration-qa-20261108]
+jobs:
+  linux-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Analyze engine
+        working-directory: packages/pdfrx_engine
+        run: dart analyze
+      - name: Native callback and condition variable stress tests
+        working-directory: packages/pdfrx_engine
+        run: dart test test/pdfium_io_result_test.dart test/pdf_file_condvar_native_test.dart test/pdf_file_cache_read_integrity_test.dart --reporter expanded
+  windows-native:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Analyze engine (Win32 FFI)
+        working-directory: packages/pdfrx_engine
+        run: dart analyze
+      - name: Native callback and Win32 condition variable stress tests
+        working-directory: packages/pdfrx_engine
+        run: dart test test/pdfium_io_result_test.dart test/pdf_file_condvar_native_test.dart test/pdf_file_cache_read_integrity_test.dart --reporter expanded

@@ -3,6 +3,7 @@ import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'pdfium_io_result.dart';
 import 'pthread/file_write.dart';
 import 'win32/file_write.dart';
 
@@ -12,18 +13,24 @@ class PdfiumFileWrite {
   /// Creates a file write structure for PDFium with the provided write function.
   static Future<PdfiumFileWrite> create(FutureOr<int> Function(Uint8List buffer, int position, int size) write) async {
     final fw = PdfiumFileWrite._();
-    void writeAndSignal(Pointer<Uint8> buffer, int position, int size) async {
+    // FPDF_FILEWRITE.WriteBlock supplies only (buffer, size), not a file offset.
+    void writeAndSignal(Pointer<Uint8> buffer, int size) async {
       try {
-        final writtenSize = await write(buffer.asTypedList(size), position, size);
-        PdfiumFileWriteHelper.instance.setValue(fw.fileWrite, writtenSize);
+        final writtenSize = await write(buffer.asTypedList(size), 0, size);
+        PdfiumFileWriteHelper.instance.setValue(fw.fileWrite, pdfiumTransferStatus(writtenSize, size));
       } catch (e) {
-        PdfiumFileWriteHelper.instance.setValue(fw.fileWrite, -1);
+        PdfiumFileWriteHelper.instance.setValue(fw.fileWrite, 0);
       }
     }
 
     fw._nativeCallable = _NativeFileWriteCallable.listener(writeAndSignal);
-    fw.fileWrite = await PdfiumFileWriteHelper.instance.create(fw._nativeCallable.nativeFunction.address);
-    return fw;
+    try {
+      fw.fileWrite = await PdfiumFileWriteHelper.instance.create(fw._nativeCallable.nativeFunction.address);
+      return fw;
+    } catch (_) {
+      fw._nativeCallable.close();
+      rethrow;
+    }
   }
 
   /// Disposes the file write structure and associated resources.
@@ -37,7 +44,7 @@ class PdfiumFileWrite {
   late final _NativeFileWriteCallable _nativeCallable;
 }
 
-typedef _NativeFileWriteCallable = NativeCallable<Void Function(Pointer<Uint8>, IntPtr, IntPtr)>;
+typedef _NativeFileWriteCallable = NativeCallable<Void Function(Pointer<Uint8>, IntPtr)>;
 
 /// Abstract interface for platform-specific file write implementations.
 abstract class PdfiumFileWriteHelper {
