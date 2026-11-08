@@ -1,0 +1,37 @@
+name: PDFium release API fallback
+
+on:
+  pull_request:
+    paths:
+      - 'packages/pdfium_dart/lib/src/proxy_http_client.dart'
+      - 'packages/pdfium_dart/hook/build.dart'
+      - 'packages/pdfium_dart/test/proxy_http_client_test.dart'
+      - '.github/workflows/pdfium-api-fallback.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.7'
+      - name: Resolve Flutter workspace
+        run: flutter pub get
+      - name: Test release fallback and proxy routing
+        working-directory: packages/pdfium_dart
+        run: dart test test/proxy_http_client_test.dart
+      - name: Check source formatting
+        run: dart format --output=none --set-exit-if-changed packages/pdfium_dart/lib/src/proxy_http_client.dart packages/pdfium_dart/hook/build.dart packages/pdfium_dart/test/proxy_http_client_test.dart
