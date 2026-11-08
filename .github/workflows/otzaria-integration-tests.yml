@@ -1,0 +1,59 @@
+name: Otzaria Integration Tests
+
+# Build Test and Pana run only for master; this covers PRs into the Otzaria integration branches.
+on:
+  push:
+    branches: [ 'fix/**', 'otzaria/**', 'integration/**' ]
+    paths-ignore:
+      - '**.md'
+      - 'doc/**'
+  pull_request:
+    branches-ignore: [ master, main ]
+    paths-ignore:
+      - '**.md'
+      - 'doc/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Flutter
+        run: |
+          git clone https://github.com/flutter/flutter.git --depth 1 --branch stable "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> $GITHUB_PATH
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libgtk-3-dev
+
+      - name: Resolve workspace
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos packages/pdfium_dart packages/pdfrx_engine packages/pdfrx packages/pdfrx_coregraphics
+
+      - name: pdfrx_engine tests
+        working-directory: packages/pdfrx_engine
+        run: dart test -r expanded
+
+      - name: pdfrx tests
+        working-directory: packages/pdfrx
+        run: flutter test -r expanded
+
+      - name: pdfium_dart tests
+        working-directory: packages/pdfium_dart
+        run: dart test -r expanded test/proxy_http_client_test.dart
