@@ -62,6 +62,7 @@ class PdfPageText {
     if (textIndex == fullText.length) {
       return fragments.length; // the end of the text
     }
+    if (textIndex < 0 || textIndex >= fullText.length || fragments.isEmpty) return -1;
     final searchIndex = PdfPageTextFragment(
       pageText: this,
       index: textIndex,
@@ -129,7 +130,7 @@ class PdfPageText {
   PdfPageTextRange getRangeFromAB(int a, int b) {
     final min = a < b ? a : b;
     final max = a < b ? b : a;
-    if (min < 0 || max > fullText.length) {
+    if (min < 0 || max >= fullText.length) {
       throw RangeError('Indices out of range: $min, $max for fullText length ${fullText.length}.');
     }
     return PdfPageTextRange(pageText: this, start: min, end: max + 1);
