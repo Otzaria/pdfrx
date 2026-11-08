@@ -1,0 +1,33 @@
+name: PDFium 8125 pinned archive integrity
+
+on:
+  push:
+    branches:
+      - palmoni5/pdfium-8125-archive-sha256-20261108
+  pull_request:
+    branches:
+      - fix/3579-visible-area-only
+
+permissions:
+  contents: read
+
+jobs:
+  checksum-and-fallback:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Verify source analyzer
+        working-directory: packages/pdfium_dart
+        run: dart analyze lib/src/pdfium_archive_integrity.dart test/pdfium_archive_integrity_test.dart hook/build.dart
+      - name: Exact PDFium 8125 digests and transport fallback tests
+        working-directory: packages/pdfium_dart
+        run: dart test test/pdfium_archive_integrity_test.dart test/proxy_http_client_test.dart

@@ -5,6 +5,7 @@ import 'package:code_assets/code_assets.dart';
 import 'package:hooks/hooks.dart';
 import 'package:native_toolchain_c/native_toolchain_c.dart';
 
+import '../lib/src/pdfium_archive_integrity.dart';
 import '../lib/src/proxy_http_client.dart';
 
 const _pdfiumRelease = 'chromium%2F8125';
@@ -57,9 +58,10 @@ Future<void> _downloadPdfium({
   final output = File.fromUri(outputFile);
   if (await output.exists()) return;
 
+  final archiveName = 'pdfium-${target.archivePlatform}-${target.archiveArch}.tgz';
   final archiveUri = Uri.parse(
     'https://github.com/bblanchon/pdfium-binaries/releases/download/'
-    '$pdfiumRelease/pdfium-${target.archivePlatform}-${target.archiveArch}.tgz',
+    '$pdfiumRelease/$archiveName',
   );
 
   final response = await getPdfiumArchiveWithApiFallback(archiveUri);
@@ -69,6 +71,10 @@ Future<void> _downloadPdfium({
     );
   }
 
+  // Check the *compressed release asset* against the immutable chromium/8125
+  // release digest, regardless of whether it came from the direct CDN or API.
+  // A gzip header alone is not a cryptographic integrity check.
+  verifyPdfium8125Archive(archiveName, response.bodyBytes);
   final archive = TarDecoder().decodeBytes(
     GZipDecoder().decodeBytes(response.bodyBytes),
   );
