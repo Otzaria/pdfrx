@@ -31,3 +31,6 @@ jobs:
       - name: Exact PDFium 8125 digests and transport fallback tests
         working-directory: packages/pdfium_dart
         run: dart test test/pdfium_archive_integrity_test.dart test/proxy_http_client_test.dart
+      - name: Download, checksum and load real PDFium 8125 native asset
+        working-directory: packages/pdfium_dart
+        run: dart test test/pdfium_test.dart test/link_hook_test.dart --reporter expanded
