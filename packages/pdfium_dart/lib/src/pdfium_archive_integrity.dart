@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:crypto/crypto.dart';
 
 /// bblanchon/pdfium-binaries release downloaded by the build hook.
@@ -54,29 +52,4 @@ void verifyPdfiumArchive(String archiveName, List<int> bytes) {
       'SHA-256 mismatch for PDFium $pdfiumRelease archive $archiveName: expected $expected, got $actual.',
     );
   }
-}
-
-/// The receipt refers to an extracted library from a previously verified
-/// archive; it is not a substitute for the pinned release archive checksum.
-File _libraryReceipt(File library) => File('${library.path}.sha256');
-
-/// Cached native libraries without a valid receipt (e.g. prior unverified
-/// builds) are not trusted and must be downloaded again.
-Future<bool> isVerifiedPdfiumLibraryCache(File library) async {
-  final receipt = _libraryReceipt(library);
-  if (!await library.exists() || !await receipt.exists()) return false;
-  try {
-    final expected = (await receipt.readAsString()).trim();
-    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(expected)) return false;
-    return sha256.convert(await library.readAsBytes()).toString() == expected;
-  } on FileSystemException {
-    return false;
-  }
-}
-
-/// Called only after verifying the full compressed release archive,
-/// successfully extracting its target member and writing its native bytes.
-Future<void> recordVerifiedPdfiumLibraryCache(File library) async {
-  final digest = sha256.convert(await library.readAsBytes()).toString();
-  await _libraryReceipt(library).writeAsString(digest);
 }

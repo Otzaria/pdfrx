@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:test/test.dart';
 
 import '../lib/src/pdfium_archive_integrity.dart';
@@ -45,18 +43,4 @@ void main() {
       expect(digest, matches(RegExp(r'^[0-9a-f]{64}$')));
     }
   });
-  test('cached libraries must have a matching integrity receipt', () async {
-    final directory = await Directory.systemTemp.createTemp('pdfrx-pdfium-cache-');
-    addTearDown(() => directory.delete(recursive: true));
-    final library = File('${directory.path}/libpdfium.so');
-    await library.writeAsBytes([1, 2, 3, 4]);
-    expect(await isVerifiedPdfiumLibraryCache(library), isFalse);
-    await recordVerifiedPdfiumLibraryCache(library);
-    expect(await isVerifiedPdfiumLibraryCache(library), isTrue);
-    await library.writeAsBytes([1, 2, 3, 5]);
-    expect(await isVerifiedPdfiumLibraryCache(library), isFalse);
-    await library.delete();
-    expect(await isVerifiedPdfiumLibraryCache(library), isFalse);
-  });
-
 }

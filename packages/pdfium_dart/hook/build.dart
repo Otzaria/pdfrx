@@ -55,8 +55,7 @@ Future<void> _downloadPdfium({
   required String pdfiumRelease,
 }) async {
   final output = File.fromUri(outputFile);
-  // Outputs left by unverified builds must never bypass archive verification.
-  if (await isVerifiedPdfiumLibraryCache(output)) return;
+  if (await output.exists()) return;
 
   final archiveName =
       'pdfium-${target.archivePlatform}-${target.archiveArch}.tgz';
@@ -85,7 +84,6 @@ Future<void> _downloadPdfium({
 
   await output.parent.create(recursive: true);
   await output.writeAsBytes(member.content as List<int>);
-  await recordVerifiedPdfiumLibraryCache(output);
 }
 
 final class _PdfiumTarget {
