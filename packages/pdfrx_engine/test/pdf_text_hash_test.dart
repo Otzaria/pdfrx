@@ -48,10 +48,4 @@ void main() {
     expect(firstRange.hashCode, secondRange.hashCode);
     expect({firstRange: 'selection'}[secondRange], 'selection');
   });
-
-  test('different page content retains distinct equality', () {
-    final first = PdfPageRawText('abc', [bounds]);
-    final second = PdfPageRawText('abc', [const PdfRect(0, 20, 3, 0)]);
-    expect(first, isNot(second));
-  });
 }

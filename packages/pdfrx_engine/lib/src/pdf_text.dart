@@ -24,7 +24,7 @@ class PdfPageRawText {
   }
 
   @override
-  int get hashCode => Object.hash(fullText, const ListEquality<PdfRect>().hash(charRects));
+  int get hashCode => Object.hash(fullText, charRects.length);
 }
 
 /// Handles text extraction from PDF page.
@@ -148,12 +148,7 @@ class PdfPageText {
   }
 
   @override
-  int get hashCode => Object.hash(
-    pageNumber,
-    fullText,
-    const ListEquality<PdfRect>().hash(charRects),
-    const ListEquality<PdfPageTextFragment>().hash(fragments),
-  );
+  int get hashCode => Object.hash(pageNumber, fullText, charRects.length, fragments.length);
 }
 
 /// Text direction in PDF page.
