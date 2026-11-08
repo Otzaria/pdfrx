@@ -16,7 +16,7 @@ import 'pdf_viewer_params.dart' show PdfViewerParams;
 /// to keep search results independent of the bounded structured-text cache.
 class PdfTextSearcher extends _PdfTextSearcherBase<PdfPageTextRange> {
   /// Creates a new instance of [PdfTextSearcher].
-  PdfTextSearcher(super.controller, {super.notificationInterval});
+  PdfTextSearcher(super.controller, {super.notificationInterval, super.onNavigateToMatch});
 
   @override
   PdfPageTextRange _createMatch(PdfPageTextRange range) => range;
