@@ -16,6 +16,16 @@ jobs:
       - name: Analyze viewer package
         working-directory: packages/pdfrx
         run: flutter analyze
+      - name: Build and verify native PDFium asset
+        working-directory: packages/pdfium_dart
+        run: dart test test/pdfium_test.dart
+      - name: Export PDFium path for worker isolates
+        shell: bash
+        run: |
+          PDFIUM=$(find .dart_tool packages -type f -name libpdfium.so -print -quit)
+          if [ -z "$PDFIUM" ]; then echo "Native PDFium binary unavailable"; exit 1; fi
+          echo "PDFIUM_PATH=$(realpath "$PDFIUM")" >> "$GITHUB_ENV"
+          echo "PDFIUM_PATH=$PDFIUM"
       - name: Full pdfrx viewer test suite (includes RTL prefetch and two panes)
         working-directory: packages/pdfrx
         run: flutter test test/ --reporter expanded
