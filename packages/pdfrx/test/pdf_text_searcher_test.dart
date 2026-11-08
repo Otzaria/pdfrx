@@ -189,6 +189,25 @@ void main() {
     expect(searcher.matches.map((m) => m.pageNumber), [1, 2]);
   });
 
+  test('navigating before any match is found leaves the current index unset', () async {
+    final searcher = _GatedSearcher(_FakeController(_FakeDocument(1)), {1: 'word'});
+    addTearDown(searcher.dispose);
+    final gate = searcher.gates[1] = Completer<void>();
+    searcher.startTextSearch('word', goToFirstMatch: false, searchImmediately: true);
+    await pumpEventQueue();
+
+    expect(await searcher.goToPrevMatch(), -1);
+    expect(await searcher.goToNextMatch(), -1);
+    expect(searcher.currentIndex, isNull);
+
+    gate.complete();
+    await pumpEventQueue();
+    expect(searcher.matches, hasLength(1));
+    expect(searcher.hasMatches, isFalse);
+    expect(await searcher.goToNextMatch(), 0);
+    expect(searcher.currentIndex, 0);
+  });
+
   testWidgets('inactive search queues only the latest query and does not run a debounce timer', (tester) async {
     final document = _FakeDocument(1, texts: {1: 'alpha beta beta'});
     final searcher = PdfTextSearchSession(_FakeController(document))..isActive = false;
@@ -974,5 +993,40 @@ void main() {
     expect(navigated, ['word']);
     expect(searcher.currentIndex, 0);
     expect(controller.navigationCount, 1);
+  });
+
+  test('search notifications tolerate listeners removing others during dispatch', () {
+    final searcher = PdfTextSearchSession(_FakeController(_FakeDocument(0)));
+    addTearDown(searcher.dispose);
+    final called = <int>[];
+    late void Function() removeSelf;
+    late void Function() removeSecond;
+    removeSelf = searcher.addListener(() {
+      called.add(1);
+      removeSelf();
+      removeSecond();
+    });
+    removeSecond = searcher.addListener(() => called.add(2));
+    final removeThird = searcher.addListener(() => called.add(3));
+
+    searcher.notifyListeners();
+    expect(called, [1, 3]);
+    called.clear();
+    searcher.notifyListeners();
+    expect(called, [3]);
+    removeThird();
+  });
+
+  test('search notifications stop when a listener disposes the searcher', () {
+    final searcher = PdfTextSearchSession(_FakeController(_FakeDocument(0)));
+    final called = <int>[];
+    searcher.addListener(() {
+      called.add(1);
+      searcher.dispose();
+    });
+    searcher.addListener(() => called.add(2));
+
+    searcher.notifyListeners();
+    expect(called, [1]);
   });
 }
