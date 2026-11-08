@@ -26,9 +26,7 @@ class _CountingRectList extends ListBase<PdfRect> {
 
 void main() {
   test('a selected character near the end of a large page needs only its own rect', () {
-    final boxes = _CountingRectList([
-      for (var i = 0; i < 10000; i++) PdfRect(i.toDouble(), 10, i + 1.0, 0),
-    ]);
+    final boxes = _CountingRectList([for (var i = 0; i < 10000; i++) PdfRect(i.toDouble(), 10, i + 1.0, 0)]);
 
     expect(boxes.boundingRect(start: 9998, end: 10000), const PdfRect(9998, 10, 10000, 0));
     expect(boxes.reads, lessThanOrEqualTo(4));
