@@ -576,21 +576,6 @@ Future<_DownloadResult> _downloadBlock(
   }
 
   if (Pdfrx.debugLazyLoading) {
-        pdfrxLazyLog(
-          'FETCH block $blockId SHORT -- asked for ${_fmtBytes(bytesExpected)}, got '
-          '${_fmtBytes(bytesThisRequest)}; marking $blocksFilled of $blockCount block(s) resident '
-          'so the rest is re-fetched rather than read back as zeroes',
-        );
-      }
-      if (blocksFilled > 0) {
-        await cache.setCached(blockId, lastBlock: blockId + blocksFilled - 1);
-      }
-    } else {
-      await cache.setCached(blockId, lastBlock: blockId + blockCount - 1);
-    }
-  }
-
-  if (Pdfrx.debugLazyLoading) {
     if (isFullDownload) {
       pdfrxLazyLog(
         'FETCH whole file ${_fmtBytes(bytesThisRequest)} -- the server ignored '
