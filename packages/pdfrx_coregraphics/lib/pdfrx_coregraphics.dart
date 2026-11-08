@@ -396,7 +396,11 @@ class _CoreGraphicsPdfDocument extends PdfDocument {
     return doc;
   }
 
+  bool _loadCompleteNotified = false;
+
   void _notifyDocumentLoadComplete() {
+    if (_disposed || _loadCompleteNotified) return;
+    _loadCompleteNotified = true;
     subject.add(PdfDocumentLoadCompleteEvent(this));
   }
 
@@ -456,7 +460,9 @@ class _CoreGraphicsPdfDocument extends PdfDocument {
     Duration loadUnitDuration = const Duration(milliseconds: 250),
     int? startPageNumber,
   }) async {
-    // CoreGraphics loads all pages immediately; nothing to do, so startPageNumber has no effect here.
+    // PDFKit has already materialized all pages. In progressive mode the
+    // completion event must be delivered here, after clients have subscribed.
+    if (useProgressiveLoading) _notifyDocumentLoadComplete();
   }
 
   @override
