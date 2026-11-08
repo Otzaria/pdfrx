@@ -1015,8 +1015,18 @@ class PdfRangeCache {
       redirect: 'follow',
     });
     if (response.status === 200) {
+      // The server ignored Range and returned a complete document. Replace
+      // partial chunks instead of leaving old bytes first in read()'s lookup.
       const data = new Uint8Array(await response.arrayBuffer());
+      const contentLength = response.headers.get('content-length');
+      if (contentLength !== null && Number(contentLength) !== data.length) {
+        throw new Error('Incomplete full PDF download');
+      }
       this.fileSize = data.length;
+      this.ranges = [];
+      this.chunks = [];
+      this.bytesCached = 0;
+      this.nextUnhintedBlockOffset = 0;
       this.addData(0, data);
       return false;
     }
@@ -1026,17 +1036,27 @@ class PdfRangeCache {
     }
 
     const contentRange = response.headers.get('content-range');
-    let start = range.offset;
-    let total = this.fileSize;
-    const match = /^bytes\s+(\d+)-(\d+)\/(\d+|\*)$/i.exec(contentRange);
-    if (match && match[3] !== '*') {
-      start = parseInt(match[1], 10);
-      total = parseInt(match[3], 10);
-    } else {
-      total = await this.ensureFileSize();
+    const match = contentRange && /^bytes\s+(\d+)-(\d+)\/(\d+|\*)$/i.exec(contentRange.trim());
+    if (!match) throw new Error('Missing or invalid PDF Content-Range');
+    const start = Number(match[1]);
+    const end = Number(match[2]);
+    const total = match[3] === '*' ? await this.ensureFileSize() : Number(match[3]);
+    if (
+      !Number.isSafeInteger(start) ||
+      !Number.isSafeInteger(end) ||
+      !Number.isSafeInteger(total) ||
+      total <= 0 ||
+      start !== range.offset ||
+      end !== Math.min(range.end, total) - 1 ||
+      (this.fileSize > 0 && this.fileSize !== total)
+    ) {
+      throw new Error('PDF Content-Range does not match the requested block');
     }
 
     const data = new Uint8Array(await response.arrayBuffer());
+    if (data.length !== end - start + 1) {
+      throw new Error('Incomplete PDF range body');
+    }
     this.fileSize = total;
     this.addData(start, data);
     return true;
