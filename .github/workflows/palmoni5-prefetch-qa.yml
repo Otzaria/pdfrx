@@ -1,0 +1,48 @@
+name: palmoni5 prefetch regression QA
+on:
+  push:
+    branches:
+      - palmoni5/prefetch-qa-20261108
+jobs:
+  full-viewer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Analyze viewer package
+        working-directory: packages/pdfrx
+        run: flutter analyze
+      - name: Full pdfrx viewer test suite (includes RTL prefetch and two panes)
+        working-directory: packages/pdfrx
+        run: flutter test test/ --reporter expanded
+  engine-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Analyze PDF engine
+        working-directory: packages/pdfrx_engine
+        run: dart analyze
+      - name: Full PDF engine test suite
+        working-directory: packages/pdfrx_engine
+        run: dart test
+  windows-build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Windows desktop build
+        working-directory: packages/pdfrx/example/viewer
+        run: flutter build windows --debug
