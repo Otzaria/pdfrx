@@ -939,7 +939,7 @@ void main() {
     expect(controller.navigationCount, 1);
   });
 
-  test('search notifications safely remove listeners and skip disposed callbacks', () {
+  test('search notifications tolerate listeners removing others during dispatch', () {
     final searcher = PdfTextSearchSession(_FakeController(_FakeDocument(0)));
     addTearDown(searcher.dispose);
     final called = <int>[];
@@ -959,5 +959,18 @@ void main() {
     searcher.notifyListeners();
     expect(called, [3]);
     removeThird();
+  });
+
+  test('search notifications stop when a listener disposes the searcher', () {
+    final searcher = PdfTextSearchSession(_FakeController(_FakeDocument(0)));
+    final called = <int>[];
+    searcher.addListener(() {
+      called.add(1);
+      searcher.dispose();
+    });
+    searcher.addListener(() => called.add(2));
+
+    searcher.notifyListeners();
+    expect(called, [1]);
   });
 }
