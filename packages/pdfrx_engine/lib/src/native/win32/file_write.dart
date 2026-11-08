@@ -13,7 +13,7 @@ class PdfiumFileWriteHelperWin32 implements PdfiumFileWriteHelper {
   @override
   Future<int> create(int writeBlock) async {
     final buffer = calloc<Uint8>(
-      sizeOf<pdfium_bindings.FPDF_FILEWRITE>() + sizeOfCriticalSection + sizeOfConditionVariable + sizeOf<IntPtr>() * 2,
+      sizeOf<pdfium_bindings.FPDF_FILEWRITE>() + sizeOfCriticalSection + sizeOfConditionVariable + sizeOf<IntPtr>() * 3,
     );
     final fw = buffer.cast<pdfium_bindings.FPDF_FILEWRITE>();
     fw.ref.version = 1;
@@ -36,9 +36,13 @@ class PdfiumFileWriteHelperWin32 implements PdfiumFileWriteHelper {
 
   @override
   void setValue(int fwAddress, int value) {
+    final cs = fwAddress + _csOffsetWrite;
+    EnterCriticalSection(cs);
     final returnValue = Pointer<IntPtr>.fromAddress(fwAddress + _retValueOffsetWrite);
     returnValue.value = value;
+    Pointer<IntPtr>.fromAddress(fwAddress + _completedOffsetWrite).value = 1;
     WakeConditionVariable(fwAddress + _cvOffsetWrite);
+    LeaveCriticalSection(cs);
   }
 }
 
@@ -65,11 +69,13 @@ int _write(Pointer<Void> pThis, Pointer<Void> pData, int size) {
 
   EnterCriticalSection(cs);
 
-  // Call Dart side write function. The call is returned immediately (it runs asynchronously)
+  final completed = Pointer<IntPtr>.fromAddress(fwAddress + _completedOffsetWrite);
+  completed.value = 0;
+  // The listener signals only after completing the asynchronous Dart write.
   writeFunc(pData, size);
-
-  // So, we should wait for Dart to signal completion
-  SleepConditionVariableCS(cv, cs, INFINITE);
+  while (completed.value == 0) {
+    SleepConditionVariableCS(cv, cs, INFINITE);
+  }
   final returnValue = Pointer<IntPtr>.fromAddress(fwAddress + _retValueOffsetWrite).value;
   LeaveCriticalSection(cs);
   return returnValue;
@@ -86,3 +92,6 @@ final _writeFuncOffset = _cvOffsetWrite + sizeOfConditionVariable;
 
 /// return-value offset within FPDF_FILEWRITE
 final _retValueOffsetWrite = _writeFuncOffset + sizeOf<IntPtr>();
+
+/// Callback completion predicate (must be guarded by the critical section).
+final _completedOffsetWrite = _retValueOffsetWrite + sizeOf<IntPtr>();
