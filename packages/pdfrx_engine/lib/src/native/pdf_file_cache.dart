@@ -124,7 +124,10 @@ class PdfFileCache {
   Future<void> _read(List<int> buffer, int bufferPosition, int position, int size) async {
     await _ensureFileOpen();
     await _raf!.setPosition(position);
-    await _raf!.readInto(buffer, bufferPosition, bufferPosition + size);
+    final readBytes = await _raf!.readInto(buffer, bufferPosition, bufferPosition + size);
+    if (readBytes != size) {
+      throw PdfException('Unexpected end of PDF cache file: requested $size bytes, got $readBytes');
+    }
   }
 
   Future<void> _write(int position, List<int> bytes) async {
