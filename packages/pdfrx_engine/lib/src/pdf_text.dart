@@ -59,9 +59,11 @@ class PdfPageText {
   /// only the exception is [textIndex] is equal to [fullText].length,
   /// which means the end of the text and it returns [fragments].length.
   int getFragmentIndexForTextIndex(int textIndex) {
+    if (textIndex < 0 || textIndex > fullText.length) return -1;
     if (textIndex == fullText.length) {
       return fragments.length; // the end of the text
     }
+    if (fragments.isEmpty) return -1;
     final searchIndex = PdfPageTextFragment(
       pageText: this,
       index: textIndex,
@@ -129,7 +131,7 @@ class PdfPageText {
   PdfPageTextRange getRangeFromAB(int a, int b) {
     final min = a < b ? a : b;
     final max = a < b ? b : a;
-    if (min < 0 || max > fullText.length) {
+    if (min < 0 || max >= fullText.length) {
       throw RangeError('Indices out of range: $min, $max for fullText length ${fullText.length}.');
     }
     return PdfPageTextRange(pageText: this, start: min, end: max + 1);
@@ -271,6 +273,7 @@ class PdfPageTextRange {
   ///
   /// The function is useful when you implement text selection algorithm or such.
   Iterable<PdfTextFragmentBoundingRect> enumerateFragmentBoundingRects() sync* {
+    if (pageText.fragments.isEmpty) return;
     final fStart = firstFragmentIndex;
     final fEnd = lastFragmentIndex;
     for (var i = fStart; i <= fEnd; i++) {
