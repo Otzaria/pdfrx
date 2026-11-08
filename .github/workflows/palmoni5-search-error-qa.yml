@@ -1,0 +1,23 @@
+name: palmoni5 search error QA
+on:
+  push:
+    branches: [palmoni5/search-error-qa-20261108]
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Formatting
+        working-directory: packages/pdfrx
+        run: dart format --output=none --set-exit-if-changed lib/src/widgets/pdf_text_searcher.dart test/pdf_text_searcher_test.dart
+      - name: Flutter analyze
+        working-directory: packages/pdfrx
+        run: flutter analyze
+      - name: Search regression tests
+        working-directory: packages/pdfrx
+        run: flutter test test/pdf_text_searcher_test.dart
