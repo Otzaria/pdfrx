@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'pdf_page.dart';
 import 'pdf_point.dart';
 
@@ -162,7 +164,18 @@ extension PdfRectsExt on Iterable<PdfRect> {
     var top = double.negativeInfinity;
     var right = double.negativeInfinity;
     var bottom = double.infinity;
-    for (final r in skip(start).take(end - start)) {
+    // A character-range query usually covers a few boxes near the end of a
+    // large page. Walking skip(start) on a List is linear in the prefix;
+    // indexed access keeps the work proportional to the selected range.
+    final rects = this;
+    final Iterable<PdfRect> selected;
+    if (rects is List<PdfRect> && start >= 0 && end >= start && start <= rects.length) {
+      final count = min(end, rects.length) - start;
+      selected = Iterable<PdfRect>.generate(count, (index) => rects[start! + index]);
+    } else {
+      selected = skip(start).take(end - start);
+    }
+    for (final r in selected) {
       if (r.left < left) {
         left = r.left;
       }
