@@ -195,3 +195,69 @@ test('page rendering premultiplies alpha once and masks internal flags', async (
   assert.deepEqual(Array.from(rendered.pixels), [50, 25, 13, 128]);
   assert.equal(rendered.formFlags, 1);
 });
+
+test('WASM range cache validates offsets and body size before retaining bytes', async () => {
+  for (const [rangeHeader, body, expectedMessage] of [
+    ['bytes 1-7/8', new Uint8Array(7), 'Content-Range'],
+    ['bytes 0-7/8', new Uint8Array(3), 'Incomplete PDF range'],
+    [null, new Uint8Array(8), 'Content-Range'],
+    ['bytes 0-7/9', new Uint8Array(8), 'Content-Range'],
+  ]) {
+    const context = createContext();
+    context.reply = {
+      status: 206,
+      statusText: 'Partial Content',
+      headers: { get(name) { return name === 'content-range' ? rangeHeader : null; } },
+      async arrayBuffer() { return body.buffer; },
+    };
+    context.fetch = async () => context.reply;
+    const result = await vm.runInContext(
+      `(async () => {
+        const cache = new PdfRangeCache('https://example.test/book.pdf', {}, false);
+        cache.fileSize = 8;
+        try {
+          await cache.download(0, 8);
+          return { error: null, chunks: cache.chunks.length };
+        } catch (e) {
+          return { error: e.message, chunks: cache.chunks.length };
+        }
+      })()`,
+      context,
+    );
+    assert.match(result.error, new RegExp(expectedMessage));
+    assert.equal(result.chunks, 0);
+  }
+});
+
+test('WASM full 200 replacement cannot serve stale partial chunks', async () => {
+  const context = createContext();
+  context.reply = {
+    status: 200,
+    headers: { get(name) { return name === 'content-length' ? '8' : null; } },
+    async arrayBuffer() { return Uint8Array.from([10, 11, 12, 13, 14, 15, 16, 17]).buffer; },
+  };
+  context.fetch = async () => context.reply;
+  const state = await vm.runInContext(
+    `(async () => {
+      const cache = new PdfRangeCache('https://example.test/book.pdf', {}, false);
+      cache.fileSize = 8;
+      cache.addData(0, new Uint8Array([99, 98]));
+      await cache.download(2, 6);
+      Pdfium.memory = new WebAssembly.Memory({ initial: 1 });
+      const ok = cache.read(0, 128, 8);
+      return {
+        ok,
+        values: [...new Uint8Array(Pdfium.memory.buffer, 128, 8)],
+        chunks: cache.chunks.length,
+        ranges: cache.ranges.length,
+        cachedBytes: cache.bytesCached,
+      };
+    })()`,
+    context,
+  );
+  assert.equal(state.ok, 1);
+  assert.deepEqual(Array.from(state.values), [10, 11, 12, 13, 14, 15, 16, 17]);
+  assert.equal(state.chunks, 1);
+  assert.equal(state.ranges, 1);
+  assert.equal(state.cachedBytes, 8);
+});
