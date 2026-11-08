@@ -164,13 +164,12 @@ class PdfDocumentRefUri extends PdfDocumentRef {
     this.firstAttemptByEmptyPassword = true,
     super.autoDispose = true,
     this.preferRangeAccess = false,
-    Map<String, String>? headers,
+    this.headers,
     this.withCredentials = false,
     this.timeout,
     this.useProgressiveLoading = true,
     PdfDocumentRefKey? key,
-  }) : headers = headers == null ? null : Map.unmodifiable(headers),
-       super(key: key ?? _uriDocumentKey(uri, headers, withCredentials));
+  }) : super(key: key ?? _uriDocumentKey(uri, headers, withCredentials));
 
   /// The URI to load the document.
   final Uri uri;

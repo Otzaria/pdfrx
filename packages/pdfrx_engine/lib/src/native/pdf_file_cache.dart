@@ -296,12 +296,8 @@ class PdfFileCache {
     final normalizedHeaders = <String, String>{};
     headers?.forEach((name, value) => normalizedHeaders[name.toLowerCase()] = value);
     final names = normalizedHeaders.keys.toList()..sort();
-    final identity = names.isEmpty
-        ? uri.toString()
-        : jsonEncode([
-            uri.toString(),
-            [for (final name in names) [name, normalizedHeaders[name]!]],
-          ]);
+    // HTTP header lines cannot contain CR/LF, so the joined identity is unambiguous.
+    final identity = [uri.toString(), for (final name in names) '$name: ${normalizedHeaders[name]}'].join('\n');
     final fnHash = sha1
         .convert(utf8.encode(identity))
         .bytes

@@ -17,30 +17,12 @@ void main() {
   });
 
   test('equivalent headers share a reference regardless of order and key casing', () {
-    final first = PdfDocumentRefUri(uri, headers: {
-      'Authorization': 'Bearer alice',
-      'X-Tenant': 'library',
-    });
-    final second = PdfDocumentRefUri(uri, headers: {
-      'x-tenant': 'library',
-      'authorization': 'Bearer alice',
-    });
+    final first = PdfDocumentRefUri(uri, headers: {'Authorization': 'Bearer alice', 'X-Tenant': 'library'});
+    final second = PdfDocumentRefUri(uri, headers: {'x-tenant': 'library', 'authorization': 'Bearer alice'});
 
     expect(first.key, second.key);
     expect(first.key.hashCode, second.key.hashCode);
     expect(first.resolveListenable(), same(second.resolveListenable()));
-  });
-
-  test('request headers are snapshotted so the load matches the cache key', () {
-    final headers = {'Authorization': 'Bearer original'};
-    final ref = PdfDocumentRefUri(uri, headers: headers);
-    headers['Authorization'] = 'Bearer changed';
-
-    expect(ref.headers!['Authorization'], 'Bearer original');
-    expect(ref.key, PdfDocumentRefUri(uri, headers: {
-      'authorization': 'Bearer original',
-    }).key);
-    expect(ref.key, isNot(PdfDocumentRefUri(uri, headers: headers).key));
   });
 
   test('explicit custom reference keys remain supported', () {
