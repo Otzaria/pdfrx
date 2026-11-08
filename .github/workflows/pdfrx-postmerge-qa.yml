@@ -1,0 +1,80 @@
+name: pdfrx post-merge integration QA
+
+on:
+  push:
+    branches:
+      - palmoni5/postmerge-qa-20261108
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  engine-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Analyze PDFium engine
+        working-directory: packages/pdfrx_engine
+        run: dart analyze
+      - name: Engine regression suite
+        working-directory: packages/pdfrx_engine
+        run: dart test --reporter expanded
+
+  viewer-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Analyze Flutter PDF viewer
+        working-directory: packages/pdfrx
+        run: flutter analyze
+      - name: All Flutter viewer regression tests
+        working-directory: packages/pdfrx
+        run: flutter test test/ --reporter expanded
+
+  web-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Web PDFium worker tests
+        run: node --test packages/pdfrx/test/pdfium_worker_metadata_test.cjs
+
+  coregraphics:
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Analyze CoreGraphics backend
+        working-directory: packages/pdfrx_coregraphics
+        run: flutter analyze
+      - name: CoreGraphics plugin regression tests
+        working-directory: packages/pdfrx_coregraphics
+        run: flutter test test/ --reporter expanded
+
+  native-windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: PDFium worker and custom I/O regression tests
+        working-directory: packages/pdfrx_engine
+        run: dart test test/pdf_document_test.dart test/background_worker_test.dart test/background_worker_task_test.dart test/resource_lifetime_test.dart test/pdf_file_cache_range_test.dart test/pdf_progressive_render_test.dart --reporter expanded
