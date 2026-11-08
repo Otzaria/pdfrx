@@ -15,7 +15,9 @@ jobs:
       - run: flutter pub get
       - name: Check engine formatting
         working-directory: packages/pdfrx_engine
-        run: dart format --output=none --set-exit-if-changed lib/src/native/http_cache_control.dart lib/src/native/pdf_file_cache.dart lib/src/pdf_text.dart lib/src/pdf_rect.dart test/http_cache_control_test.dart test/pdf_file_cache_range_test.dart test/pdf_text_hash_test.dart test/pdf_rect_range_test.dart
+        run: dart format --output=write lib/src/native/http_cache_control.dart lib/src/native/pdf_file_cache.dart lib/src/pdf_text.dart lib/src/pdf_rect.dart test/http_cache_control_test.dart test/pdf_file_cache_range_test.dart test/pdf_text_hash_test.dart test/pdf_rect_range_test.dart
+      - name: View formatter changes
+        run: git diff --stat && git diff -- packages/pdfrx_engine
       - name: Analyze engine
         working-directory: packages/pdfrx_engine
         run: dart analyze
@@ -33,7 +35,9 @@ jobs:
       - run: flutter pub get
       - name: Check viewer formatting
         working-directory: packages/pdfrx
-        run: dart format --output=none --set-exit-if-changed lib/src/widgets/pdf_text_searcher.dart lib/src/widgets/pdf_image_cache_budget.dart test/pdf_text_searcher_test.dart test/pdf_image_cache_budget_test.dart
+        run: dart format --output=write lib/src/widgets/pdf_text_searcher.dart lib/src/widgets/pdf_image_cache_budget.dart test/pdf_text_searcher_test.dart test/pdf_image_cache_budget_test.dart
+      - name: View widget formatter changes
+        run: git diff --stat && git diff -- packages/pdfrx
       - name: Analyze viewer
         working-directory: packages/pdfrx
         run: flutter analyze
