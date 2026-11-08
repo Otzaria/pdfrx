@@ -736,4 +736,26 @@ void main() {
     expect(searcher.currentIndex, 0);
     expect(controller.navigationCount, 1);
   });
+
+  test('search notifications safely remove listeners and skip disposed callbacks', () {
+    final searcher = PdfTextSearchSession(_FakeController(_FakeDocument(0)));
+    addTearDown(searcher.dispose);
+    final called = <int>[];
+    late void Function() removeSelf;
+    late void Function() removeSecond;
+    removeSelf = searcher.addListener(() {
+      called.add(1);
+      removeSelf();
+      removeSecond();
+    });
+    removeSecond = searcher.addListener(() => called.add(2));
+    final removeThird = searcher.addListener(() => called.add(3));
+
+    searcher.notifyListeners();
+    expect(called, [1, 3]);
+    called.clear();
+    searcher.notifyListeners();
+    expect(called, [3]);
+    removeThird();
+  });
 }
