@@ -2459,6 +2459,12 @@ class _PdfViewerState extends State<PdfViewer>
           cache.pageImages[page.pageNumber]?.dispose();
           cache.pageImages[page.pageNumber] = newImage;
           if (identical(cache, _imageCache)) _completeInitialPageImageWaiterIfReady();
+          // QA branch only: record real PDFium time-to-first-preview on Windows.
+          // Compiled out when PDFRX_JUMP_BENCH is not defined.
+          if (const bool.fromEnvironment('PDFRX_JUMP_BENCH')) {
+            debugPrint('JUMP_BENCH_RENDER page=${page.pageNumber} at_us=${DateTime.now().microsecondsSinceEpoch} '
+                'priority=$priority retained=${_imageBudget.retainedBytes} pending=${_imageBudget.pendingBytes}');
+          }
           if (sw != null) {
             final fetched = Pdfrx.debugBytesFetched - bytesAtRequest;
             pdfrxLazyLog(
