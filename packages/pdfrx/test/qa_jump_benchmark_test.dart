@@ -13,14 +13,14 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => pdfrxInitialize());
 
-  for (final scenario in ['text', 'scan']) {
+  for (final scenario in ['text', 'scan', 'scan-fast']) {
     testWidgets('JUMP_BENCH $scenario top-anchor extent1 DPR2 native PDFium', (tester) async {
     tester.view.physicalSize = const Size(2560, 1440);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
 
     final document = (await tester.runAsync(
-      () => PdfDocument.openFile(scenario == 'scan' ? 'test/assets/qa_scanned40.pdf' : 'test/assets/multipage40.pdf', useProgressiveLoading: false),
+      () => PdfDocument.openFile(scenario.startsWith('scan') ? 'test/assets/qa_scanned40.pdf' : 'test/assets/multipage40.pdf', useProgressiveLoading: false),
     ))!;
     addTearDown(document.dispose);
     expect(document.pages.length, 40);
@@ -74,7 +74,7 @@ void main() {
         anchor: PdfPageAnchor.top,
         duration: Duration.zero,
       );
-      for (var i = 0; i < 75; i++) {
+      for (var i = 0; i < (scenario == 'scan-fast' ? 12 : 75); i++) {
         await frame();
       }
       print('JUMP_BENCH_SETTLED scenario=$scenario page=$target at_us=${DateTime.now().microsecondsSinceEpoch} '
