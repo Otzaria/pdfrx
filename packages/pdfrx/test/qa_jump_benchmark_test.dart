@@ -13,13 +13,14 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => pdfrxInitialize());
 
-  testWidgets('JUMP_BENCH top-anchor extent1 DPR2 native PDFium', (tester) async {
+  for (final scenario in ['text', 'scan']) {
+    testWidgets('JUMP_BENCH $scenario top-anchor extent1 DPR2 native PDFium', (tester) async {
     tester.view.physicalSize = const Size(2560, 1440);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
 
     final document = (await tester.runAsync(
-      () => PdfDocument.openFile('test/assets/multipage40.pdf', useProgressiveLoading: false),
+      () => PdfDocument.openFile(scenario == 'scan' ? 'test/assets/qa_scanned40.pdf' : 'test/assets/multipage40.pdf', useProgressiveLoading: false),
     ))!;
     addTearDown(document.dispose);
     expect(document.pages.length, 40);
@@ -63,11 +64,11 @@ void main() {
     for (var i = 0; i < 35; i++) {
       await frame();
     }
-    print('JUMP_BENCH_READY at_us=${DateTime.now().microsecondsSinceEpoch} pages=${document.pages.length}');
+    print('JUMP_BENCH_READY scenario=$scenario at_us=${DateTime.now().microsecondsSinceEpoch} pages=${document.pages.length}');
 
     for (final target in [12, 25, 36, 7, 30, 18]) {
       final start = DateTime.now().microsecondsSinceEpoch;
-      print('JUMP_BENCH_START page=$target at_us=$start');
+      print('JUMP_BENCH_START scenario=$scenario page=$target at_us=$start');
       await controller.goToPage(
         pageNumber: target,
         anchor: PdfPageAnchor.top,
@@ -76,16 +77,17 @@ void main() {
       for (var i = 0; i < 75; i++) {
         await frame();
       }
-      print('JUMP_BENCH_SETTLED page=$target at_us=${DateTime.now().microsecondsSinceEpoch} '
+      print('JUMP_BENCH_SETTLED scenario=$scenario page=$target at_us=${DateTime.now().microsecondsSinceEpoch} '
           'retained=${budget.retainedBytes} pending=${budget.pendingBytes}');
       expect(controller.pageNumber, target);
       expect(tester.takeException(), isNull);
     }
 
-    print('JUMP_BENCH_PEAK estimated=${budget.peakEstimatedBytes} limit=${budget.maximumBytes}');
+    print('JUMP_BENCH_PEAK scenario=$scenario estimated=${budget.peakEstimatedBytes} limit=${budget.maximumBytes}');
     await tester.pumpWidget(const SizedBox.shrink());
     for (var i = 0; i < 15; i++) {
       await frame();
     }
-  });
+    });
+  }
 }
