@@ -18,11 +18,10 @@ void main() {
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
 
-    final document = await tester.runAsync(
+    final document = (await tester.runAsync(
       () => PdfDocument.openFile('test/assets/multipage40.pdf', useProgressiveLoading: false),
-    );
-    expect(document, isNotNull);
-    addTearDown(document!.dispose);
+    ))!;
+    addTearDown(document.dispose);
     expect(document.pages.length, 40);
 
     final budget = PdfImageCacheBudget(maximumBytes: 96 * 1024 * 1024);
