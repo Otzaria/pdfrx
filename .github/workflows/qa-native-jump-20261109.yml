@@ -37,3 +37,11 @@ jobs:
       - name: Benchmark real PDFium page jumps (same test on both revisions)
         working-directory: packages/pdfrx
         run: flutter test test/qa_jump_benchmark_test.dart --dart-define=PDFRX_JUMP_BENCH=true --reporter expanded
+
+      - name: Generate scanned PDF asset for native profile app
+        working-directory: packages/pdfrx
+        run: python ../../tool/qa/generate_scanned_pdf.py example/viewer/assets/qa_scanned40.pdf
+
+      - name: Measure native Windows profile jumps and process RSS
+        working-directory: packages/pdfrx/example/viewer
+        run: flutter drive --profile -d windows --driver=test_driver/integration_test.dart --target=integration_test/qa_native_jump_profile_test.dart --dart-define=PDFRX_JUMP_BENCH=true
