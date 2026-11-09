@@ -25,6 +25,15 @@ jobs:
         working-directory: packages/pdfrx/example/viewer
         run: flutter pub get
 
+      - name: Setup Python for deterministic scanned PDF fixture
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate 40-page scanned PDF fixture
+        working-directory: packages/pdfrx
+        run: python ../../tool/qa/generate_scanned_pdf.py test/assets/qa_scanned40.pdf
+
       - name: Benchmark real PDFium page jumps (same test on both revisions)
         working-directory: packages/pdfrx
         run: flutter test test/qa_jump_benchmark_test.dart --dart-define=PDFRX_JUMP_BENCH=true --reporter expanded
